@@ -360,8 +360,205 @@ const RoomsTab = memo(function RoomsTab({ onOpenRoom }) {
   );
 });
 
+// ── ANALYTICS PAGE ──
+function AnalyticsPage() {
+  const [stats, setStats] = useState(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    setLoading(true);
+    fetch(`${API}/api/analytics`)
+      .then((r) => r.json())
+      .then(setStats)
+      .catch(() => {})
+      .finally(() => setLoading(false));
+  }, []);
+
+  if (loading) {
+    return (
+      <div style={{ textAlign: 'center', padding: 60 }}>
+        <div style={{ color: 'var(--text-muted)', fontSize: 15 }}>Memuat analytics...</div>
+      </div>
+    );
+  }
+
+  if (!stats) {
+    return (
+      <div className="empty-state">Gagal memuat data analytics</div>
+    );
+  }
+
+  const storagePercent = stats.storage?.usedPercent || 0;
+  const dbPercent = stats.database?.usedPercent || 0;
+
+  return (
+    <div>
+      {/* Storage Overview */}
+      <div className="cards" style={{ marginBottom: 24 }}>
+        <div className="card" style={{ borderTop: '3px solid var(--cyan)' }}>
+          <div className="lbl">Database Size</div>
+          <div className="num" style={{ fontSize: 28 }}>{stats.database?.used || '-'}</div>
+          <div style={{ marginTop: 8 }}>
+            <div className="progress-bar">
+              <div className="progress-fill" style={{ width: `${dbPercent}%`, background: 'var(--cyan)' }} />
+            </div>
+            <div style={{ fontSize: 12, color: 'var(--text-dim)', marginTop: 4 }}>
+              {dbPercent}% dari {stats.database?.limit || '-'}
+            </div>
+          </div>
+        </div>
+
+        <div className="card" style={{ borderTop: '3px solid var(--purple)' }}>
+          <div className="lbl">File Storage</div>
+          <div className="num" style={{ fontSize: 28 }}>{stats.storage?.used || '-'}</div>
+          <div style={{ marginTop: 8 }}>
+            <div className="progress-bar">
+              <div className="progress-fill" style={{ width: `${storagePercent}%`, background: 'var(--purple)' }} />
+            </div>
+            <div style={{ fontSize: 12, color: 'var(--text-dim)', marginTop: 4 }}>
+              {storagePercent}% dari {stats.storage?.limit || '-'}
+            </div>
+          </div>
+        </div>
+
+        <div className="card" style={{ borderTop: '3px solid var(--accent)' }}>
+          <div className="lbl">Bandwidth (Egress)</div>
+          <div className="num" style={{ fontSize: 28 }}>{stats.bandwidth?.used || '-'}</div>
+          <div style={{ marginTop: 8 }}>
+            <div className="progress-bar">
+              <div className="progress-fill" style={{ width: `${stats.bandwidth?.usedPercent || 0}%`, background: 'var(--accent)' }} />
+            </div>
+            <div style={{ fontSize: 12, color: 'var(--text-dim)', marginTop: 4 }}>
+              {stats.bandwidth?.usedPercent || 0}% dari {stats.bandwidth?.limit || '-'}
+            </div>
+          </div>
+        </div>
+
+        <div className="card" style={{ borderTop: '3px solid var(--green)' }}>
+          <div className="lbl">Monthly Active Users</div>
+          <div className="num" style={{ fontSize: 28 }}>{stats.mau?.current || 0}</div>
+          <div style={{ fontSize: 12, color: 'var(--text-dim)', marginTop: 8 }}>
+            Limit: {stats.mau?.limit || '-'}
+          </div>
+        </div>
+      </div>
+
+      {/* Table Sizes */}
+      <div className="card" style={{ marginBottom: 24, padding: 24 }}>
+        <h3 style={{ marginBottom: 20, fontSize: 16, fontWeight: 700 }}>Ukuran Tabel</h3>
+        <table className="tbl">
+          <thead>
+            <tr>
+              <th>Tabel</th>
+              <th>Baris</th>
+              <th>Size</th>
+              <th>Index Size</th>
+              <th>Total</th>
+            </tr>
+          </thead>
+          <tbody>
+            {(stats.tables || []).map((t) => (
+              <tr key={t.name}>
+                <td style={{ fontWeight: 600, fontFamily: 'monospace' }}>{t.name}</td>
+                <td>{t.rows?.toLocaleString() || 0}</td>
+                <td>{t.size || '-'}</td>
+                <td style={{ color: 'var(--text-muted)' }}>{t.indexSize || '-'}</td>
+                <td style={{ fontWeight: 600 }}>{t.totalSize || '-'}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+
+      {/* RPC Functions */}
+      <div className="card" style={{ padding: 24 }}>
+        <h3 style={{ marginBottom: 20, fontSize: 16, fontWeight: 700 }}>Database Objects</h3>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: 16 }}>
+          <div style={{ background: 'var(--bg)', borderRadius: 10, padding: 16, textAlign: 'center' }}>
+            <div style={{ fontSize: 24, fontWeight: 800, color: 'var(--accent)' }}>{stats.objects?.tables || 0}</div>
+            <div style={{ fontSize: 12, color: 'var(--text-muted)', textTransform: 'uppercase' }}>Tables</div>
+          </div>
+          <div style={{ background: 'var(--bg)', borderRadius: 10, padding: 16, textAlign: 'center' }}>
+            <div style={{ fontSize: 24, fontWeight: 800, color: 'var(--purple)' }}>{stats.objects?.functions || 0}</div>
+            <div style={{ fontSize: 12, color: 'var(--text-muted)', textTransform: 'uppercase' }}>Functions</div>
+          </div>
+          <div style={{ background: 'var(--bg)', borderRadius: 10, padding: 16, textAlign: 'center' }}>
+            <div style={{ fontSize: 24, fontWeight: 800, color: 'var(--green)' }}>{stats.objects?.indexes || 0}</div>
+            <div style={{ fontSize: 12, color: 'var(--text-muted)', textTransform: 'uppercase' }}>Indexes</div>
+          </div>
+          <div style={{ background: 'var(--bg)', borderRadius: 10, padding: 16, textAlign: 'center' }}>
+            <div style={{ fontSize: 24, fontWeight: 800, color: 'var(--cyan)' }}>{stats.objects?.policies || 0}</div>
+            <div style={{ fontSize: 12, color: 'var(--text-muted)', textTransform: 'uppercase' }}>RLS Policies</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── SIDEBAR ──
+function Sidebar({ active, onChange }) {
+  const menuItems = [
+    { id: 'chat', label: 'App Chat', icon: '💬' },
+    { id: 'analytics', label: 'Analytics', icon: '📊' },
+  ];
+
+  const chatSubMenus = [
+    { id: 'dashboard', label: 'Dashboard' },
+    { id: 'users', label: 'Users' },
+    { id: 'chats', label: 'Private Chats' },
+    { id: 'rooms', label: 'Rooms' },
+  ];
+
+  return (
+    <aside className="sidebar">
+      <div className="sidebar-header">
+        <div className="sidebar-logo">💬</div>
+        <div>
+          <div className="sidebar-title">ChatYuk</div>
+          <div className="sidebar-subtitle">Admin Panel</div>
+        </div>
+      </div>
+
+      <nav className="sidebar-nav">
+        {menuItems.map((item) => (
+          <div key={item.id}>
+            <button
+              className={`sidebar-item ${active === item.id || (item.id === 'chat' && ['dashboard', 'users', 'chats', 'rooms'].includes(active)) ? 'active' : ''}`}
+              onClick={() => onChange(item.id === 'chat' ? 'dashboard' : item.id)}
+            >
+              <span className="sidebar-icon">{item.icon}</span>
+              <span>{item.label}</span>
+            </button>
+            {item.id === 'chat' && (active === 'dashboard' || active === 'users' || active === 'chats' || active === 'rooms') && (
+              <div className="sidebar-submenu">
+                {chatSubMenus.map((sub) => (
+                  <button
+                    key={sub.id}
+                    className={`sidebar-subitem ${active === sub.id ? 'active' : ''}`}
+                    onClick={() => onChange(sub.id)}
+                  >
+                    {sub.label}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+        ))}
+      </nav>
+
+      <div className="sidebar-footer">
+        <div className="sidebar-status">
+          <span className="status-online">●</span>
+          <span>Supabase Connected</span>
+        </div>
+      </div>
+    </aside>
+  );
+}
+
 function App() {
-  const [tab, setTab] = useState('dashboard');
+  const [page, setPage] = useState('dashboard');
   const [summary, setSummary] = useState(null);
   const [users, setUsers] = useState([]);
   const [userModal, setUserModal] = useState(null);
@@ -373,10 +570,12 @@ function App() {
     fetch(`${API}/api/users`).then((r) => r.json()).then((d) => Array.isArray(d) && setUsers(d)).catch(() => {});
   }, []);
   useEffect(() => {
-    refreshAll();
-    const t = setInterval(refreshAll, 30000);
-    return () => clearInterval(t);
-  }, [refreshAll]);
+    if (page !== 'analytics') {
+      refreshAll();
+      const t = setInterval(refreshAll, 30000);
+      return () => clearInterval(t);
+    }
+  }, [refreshAll, page]);
 
   const openChat = (c) => {
     setChatLoading(true);
@@ -408,64 +607,66 @@ function App() {
   const sc = summary?.statusCounts || {};
 
   return (
-    <div className="app">
-      <header className="topbar">
-        <div>
-          <h1>ChatYuk Admin</h1>
-          <div style={{ fontSize: 12, color: 'var(--text-dim)', marginTop: 4 }}>
-            Supabase Connected · Realtime Dashboard
-          </div>
-        </div>
-        <nav>
-          <button className={tab === 'dashboard' ? 'tab active' : 'tab'} onClick={() => setTab('dashboard')}>Dashboard</button>
-          <button className={tab === 'users' ? 'tab active' : 'tab'} onClick={() => setTab('users')}>Users ({users.length})</button>
-          <button className={tab === 'chats' ? 'tab active' : 'tab'} onClick={() => setTab('chats')}>Private Chats</button>
-          <button className={tab === 'rooms' ? 'tab active' : 'tab'} onClick={() => setTab('rooms')}>Rooms</button>
-        </nav>
-      </header>
+    <div className="app-layout">
+      <Sidebar active={page} onChange={setPage} />
 
-      {tab === 'dashboard' && (
-        <div className="cards">
-          <div className="card">
-            <div className="num">{summary?.users ?? '-'}</div>
-            <div className="lbl">Total User</div>
+      <main className="main-content">
+        <header className="content-header">
+          <h2>{page === 'analytics' ? '📊 Analytics Supabase' : page === 'users' ? '👥 Users' : page === 'chats' ? '💬 Private Chats' : page === 'rooms' ? '🏠 Rooms' : '💬 Dashboard'}</h2>
+          <div style={{ fontSize: 13, color: 'var(--text-dim)' }}>
+            {page === 'analytics' ? 'Monitoring penggunaan resource' : `Total: ${users.length} user terdaftar`}
           </div>
-          <div className="card" style={{ borderTop: '3px solid var(--green)' }}>
-            <div className="num" style={{ color: 'var(--green)' }}>{sc.online ?? 0}</div>
-            <div className="lbl">Online</div>
-          </div>
-          <div className="card" style={{ borderTop: '3px solid var(--yellow)' }}>
-            <div className="num" style={{ color: 'var(--yellow)' }}>{sc.idle ?? 0}</div>
-            <div className="lbl">Idle</div>
-          </div>
-          <div className="card" style={{ borderTop: '3px solid var(--text-dim)' }}>
-            <div className="num" style={{ color: 'var(--text-dim)' }}>{sc.offline ?? 0}</div>
-            <div className="lbl">Offline</div>
-          </div>
-          <div className="card" style={{ borderTop: '3px solid var(--accent)' }}>
-            <div className="num">{summary?.privateChats ?? '-'}</div>
-            <div className="lbl">Private Chat</div>
-          </div>
-          <div className="card" style={{ borderTop: '3px solid var(--purple)' }}>
-            <div className="num">{summary?.rooms?.length ?? '-'}</div>
-            <div className="lbl">Room</div>
-          </div>
-          <div className="card wide" style={{ borderTop: '3px solid var(--cyan)' }}>
-            <div className="lbl" style={{ marginBottom: 16 }}>Room Online</div>
-            {(summary?.rooms || []).map((r) => (
-              <div key={r.id} className="room-item">
-                <span>{r.name}</span>
-                <b>{r.online}</b>
+        </header>
+
+        {page === 'analytics' ? (
+          <AnalyticsPage />
+        ) : (
+          <>
+            {page === 'dashboard' && (
+              <div className="cards">
+                <div className="card">
+                  <div className="num">{summary?.users ?? '-'}</div>
+                  <div className="lbl">Total User</div>
+                </div>
+                <div className="card" style={{ borderTop: '3px solid var(--green)' }}>
+                  <div className="num" style={{ color: 'var(--green)' }}>{sc.online ?? 0}</div>
+                  <div className="lbl">Online</div>
+                </div>
+                <div className="card" style={{ borderTop: '3px solid var(--yellow)' }}>
+                  <div className="num" style={{ color: 'var(--yellow)' }}>{sc.idle ?? 0}</div>
+                  <div className="lbl">Idle</div>
+                </div>
+                <div className="card" style={{ borderTop: '3px solid var(--text-dim)' }}>
+                  <div className="num" style={{ color: 'var(--text-dim)' }}>{sc.offline ?? 0}</div>
+                  <div className="lbl">Offline</div>
+                </div>
+                <div className="card" style={{ borderTop: '3px solid var(--accent)' }}>
+                  <div className="num">{summary?.privateChats ?? '-'}</div>
+                  <div className="lbl">Private Chat</div>
+                </div>
+                <div className="card" style={{ borderTop: '3px solid var(--purple)' }}>
+                  <div className="num">{summary?.rooms?.length ?? '-'}</div>
+                  <div className="lbl">Room</div>
+                </div>
+                <div className="card wide" style={{ borderTop: '3px solid var(--cyan)' }}>
+                  <div className="lbl" style={{ marginBottom: 16 }}>Room Online</div>
+                  {(summary?.rooms || []).map((r) => (
+                    <div key={r.id} className="room-item">
+                      <span>{r.name}</span>
+                      <b>{r.online}</b>
+                    </div>
+                  ))}
+                  {(summary?.rooms || []).length === 0 && <div className="empty-state">Belum ada room</div>}
+                </div>
               </div>
-            ))}
-            {(summary?.rooms || []).length === 0 && <div className="empty-state">Belum ada room</div>}
-          </div>
-        </div>
-      )}
+            )}
 
-      {tab === 'users' && <UsersTab users={users} onOpenUser={setUserModal} />}
-      {tab === 'chats' && <PrivateChatsTab onOpenChat={openChat} />}
-      {tab === 'rooms' && <RoomsTab onOpenRoom={openRoomChat} />}
+            {page === 'users' && <UsersTab users={users} onOpenUser={setUserModal} />}
+            {page === 'chats' && <PrivateChatsTab onOpenChat={openChat} />}
+            {page === 'rooms' && <RoomsTab onOpenRoom={openRoomChat} />}
+          </>
+        )}
+      </main>
 
       {userModal && (
         <UserModal user={userModal} onClose={() => setUserModal(null)} onOpenChat={(c) => { setUserModal(null); openChat(c); }} />
