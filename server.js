@@ -1,6 +1,7 @@
 require('dotenv').config();
 const path = require('path');
 const express = require('express');
+const compression = require('compression');
 const { createClient } = require('@supabase/supabase-js');
 
 const supabase = createClient(
@@ -12,8 +13,31 @@ const supabase = createClient(
 const server = express();
 const PORT = process.env.PORT || 8090;
 
+// ── MIDDLEWARE ──
+server.use(compression());
 server.use(express.json());
-server.use(express.static(path.join(__dirname, 'client', 'dist')));
+server.use(express.static(path.join(__dirname, 'client', 'dist'), {
+  maxAge: '1h',
+  etag: true,
+}));
+
+// ── CACHE ──
+const cache = new Map();
+const CACHE_TTL = 5000; // 5 detik
+
+function getCached(key) {
+  const entry = cache.get(key);
+  if (entry && Date.now() - entry.ts < CACHE_TTL) return entry.data;
+  return null;
+}
+
+function setCache(key, data) {
+  cache.set(key, { data, ts: Date.now() });
+}
+
+function clearCache() {
+  cache.clear();
+}
 
 const TS = (v) => {
   if (!v) return null;
@@ -40,15 +64,19 @@ server.get('/api/seed-rooms', async (req, res) => {
   try {
     const { error } = await supabase.from('rooms').upsert(DEFAULT_ROOMS, { onConflict: 'id' });
     if (error) throw error;
+    clearCache();
     res.json({ ok: true, seeded: DEFAULT_ROOMS.length });
   } catch (e) {
     res.status(500).json({ error: e.message });
   }
 });
 
-// ── SUMMARY ──
+// ── SUMMARY (cached) ──
 server.get('/api/summary', async (req, res) => {
   try {
+    const cached = getCached('summary');
+    if (cached) return res.json(cached);
+
     const [profilesRes, chatsRes, roomsRes, presenceRes] = await Promise.all([
       supabase.from('profiles').select('id, status', { count: 'exact' }),
       supabase.from('private_chats').select('chat_id', { count: 'exact' }),
@@ -67,7 +95,6 @@ server.get('/api/summary', async (req, res) => {
       if (statusCounts[s] != null) statusCounts[s]++;
     });
 
-    // Count online per room
     const roomOnlineMap = {};
     (presenceRes.data || []).forEach((rp) => {
       roomOnlineMap[rp.room_id] = (roomOnlineMap[rp.room_id] || 0) + 1;
@@ -79,24 +106,30 @@ server.get('/api/summary', async (req, res) => {
       online: roomOnlineMap[r.id] || 0,
     }));
 
-    res.json({
+    const result = {
       users: profilesRes.count || 0,
       registered: profilesRes.count || 0,
       statusCounts,
       privateChats: chatsRes.count || 0,
       rooms,
-    });
+    };
+
+    setCache('summary', result);
+    res.json(result);
   } catch (e) {
     res.status(500).json({ error: e.message });
   }
 });
 
-// ── USERS ──
+// ── USERS (cached) ──
 server.get('/api/users', async (req, res) => {
   try {
+    const cached = getCached('users');
+    if (cached) return res.json(cached);
+
     const { data, error } = await supabase
       .from('profiles')
-      .select('*')
+      .select('id, nickname, gender, age, country, city, ip_address, status, avatar, login_at, created_at, last_seen')
       .order('created_at', { ascending: false });
     if (error) throw error;
 
@@ -115,63 +148,81 @@ server.get('/api/users', async (req, res) => {
       presenceLastSeen: TS(u.last_seen),
       hasAvatar: !!(u.avatar && u.avatar.length > 0),
     }));
+
+    setCache('users', users);
     res.json(users);
   } catch (e) {
     res.status(500).json({ error: e.message });
   }
 });
 
-// ── USER DETAIL ──
+// ── USER DETAIL (optimized - no N+1) ──
 server.get('/api/users/:uid', async (req, res) => {
   try {
     const uid = req.params.uid;
+    const cacheKey = `user:${uid}`;
+    const cached = getCached(cacheKey);
+    if (cached) return res.json(cached);
+
+    // Parallel queries
     const [profileRes, chatsRes] = await Promise.all([
       supabase.from('profiles').select('*').eq('id', uid).single(),
-      supabase
-        .from('private_chats')
-        .select('*')
-        .contains('participants', [uid]),
+      supabase.from('private_chats').select('*').contains('participants', [uid]),
     ]);
 
     if (profileRes.error) throw profileRes.error;
     if (!profileRes.data) return res.status(404).json({ error: 'User tidak ditemukan' });
 
     const u = profileRes.data;
-    const chats = [];
+    const chatData = chatsRes.data || [];
 
-    for (const c of chatsRes.data || []) {
+    // Batch query: ambil semua last messages sekaligus
+    const chatIds = chatData.map((c) => c.chat_id);
+
+    let lastMessagesMap = {};
+    let messageCountsMap = {};
+
+    if (chatIds.length > 0) {
+      // Parallel: last messages + counts
+      const [lastMsgsRes, countsRes] = await Promise.all([
+        // Ambil 1 pesan terakhir per chat pakai RPC atau subquery
+        supabase.rpc('get_last_messages', { chat_ids: chatIds }),
+        // Count per chat pakai RPC
+        supabase.rpc('get_message_counts', { chat_ids: chatIds }),
+      ]);
+
+      if (!lastMsgsRes.error && lastMsgsRes.data) {
+        lastMsgsRes.data.forEach((m) => {
+          lastMessagesMap[m.chat_id] = m;
+        });
+      }
+
+      if (!countsRes.error && countsRes.data) {
+        countsRes.data.forEach((c) => {
+          messageCountsMap[c.chat_id] = c.cnt;
+        });
+      }
+    }
+
+    const chats = chatData.map((c) => {
       const parts = c.participants || [];
       const otherId = parts.find((x) => x !== uid);
       const otherName = (c.participant_names || {})[otherId] || otherId;
+      const lastMsg = lastMessagesMap[c.chat_id];
 
-      // Get last message
-      const { data: lastMsg } = await supabase
-        .from('private_messages')
-        .select('text, type, created_at')
-        .eq('chat_id', c.chat_id)
-        .order('created_at', { ascending: false })
-        .limit(1)
-        .single();
-
-      // Count messages
-      const { count } = await supabase
-        .from('private_messages')
-        .select('id', { count: 'exact', head: true })
-        .eq('chat_id', c.chat_id);
-
-      chats.push({
+      return {
         chatId: c.chat_id,
         otherId,
         otherName,
         lastMessage: lastMsg ? (lastMsg.type === 'image' ? '[Foto]' : lastMsg.text || '') : c.last_message || '',
         lastMessageAt: lastMsg ? TS(lastMsg.created_at) : TS(c.last_message_at),
-        messageCount: count || 0,
-      });
-    }
+        messageCount: messageCountsMap[c.chat_id] || 0,
+      };
+    });
 
     chats.sort((a, b) => (b.lastMessageAt || '').localeCompare(a.lastMessageAt || ''));
 
-    res.json({
+    const result = {
       uid,
       nickname: u.nickname || 'Anon',
       gender: u.gender || '',
@@ -187,37 +238,51 @@ server.get('/api/users/:uid', async (req, res) => {
       hasAvatar: !!(u.avatar && u.avatar.length > 0),
       avatar: u.avatar || '',
       chats,
-    });
+    };
+
+    setCache(cacheKey, result);
+    res.json(result);
   } catch (e) {
     res.status(500).json({ error: e.message });
   }
 });
 
-// ── PRIVATE CHATS ──
+// ── PRIVATE CHATS (optimized - no N+1) ──
 server.get('/api/private-chats', async (req, res) => {
   try {
+    const cached = getCached('private-chats');
+    if (cached) return res.json(cached);
+
     const { data, error } = await supabase
       .from('private_chats')
       .select('*')
       .order('last_message_at', { ascending: false });
     if (error) throw error;
 
-    const chats = [];
-    for (const c of data || []) {
-      const { count } = await supabase
-        .from('private_messages')
-        .select('id', { count: 'exact', head: true })
-        .eq('chat_id', c.chat_id);
+    const chatData = data || [];
+    const chatIds = chatData.map((c) => c.chat_id);
 
-      chats.push({
-        chatId: c.chat_id,
-        participants: c.participants || [],
-        participantNames: c.participant_names || {},
-        lastMessage: c.last_message || '',
-        lastMessageAt: TS(c.last_message_at),
-        messageCount: count || 0,
-      });
+    let messageCountsMap = {};
+
+    if (chatIds.length > 0) {
+      const { data: counts, error: countError } = await supabase.rpc('get_message_counts', { chat_ids: chatIds });
+      if (!countError && counts) {
+        counts.forEach((c) => {
+          messageCountsMap[c.chat_id] = c.cnt;
+        });
+      }
     }
+
+    const chats = chatData.map((c) => ({
+      chatId: c.chat_id,
+      participants: c.participants || [],
+      participantNames: c.participant_names || {},
+      lastMessage: c.last_message || '',
+      lastMessageAt: TS(c.last_message_at),
+      messageCount: messageCountsMap[c.chat_id] || 0,
+    }));
+
+    setCache('private-chats', chats);
     res.json(chats);
   } catch (e) {
     res.status(500).json({ error: e.message });
@@ -229,12 +294,15 @@ server.get('/api/private-chats/:chatId/messages', async (req, res) => {
   try {
     const limit = Math.min(parseInt(req.query.limit || '200'), 500);
     const chatId = req.params.chatId;
+    const cacheKey = `msgs:${chatId}:${limit}`;
+    const cached = getCached(cacheKey);
+    if (cached) return res.json(cached);
 
     const [chatRes, msgsRes] = await Promise.all([
       supabase.from('private_chats').select('*').eq('chat_id', chatId).single(),
       supabase
         .from('private_messages')
-        .select('*')
+        .select('id, sender_id, sender_name, text, type, image_data, created_at')
         .eq('chat_id', chatId)
         .order('created_at', { ascending: false })
         .limit(limit),
@@ -255,17 +323,22 @@ server.get('/api/private-chats/:chatId/messages', async (req, res) => {
       }))
       .reverse();
 
-    res.json({ chatId, meta: chatRes.data, messages });
+    const result = { chatId, meta: chatRes.data, messages };
+    setCache(cacheKey, result);
+    res.json(result);
   } catch (e) {
     res.status(500).json({ error: e.message });
   }
 });
 
-// ── ROOMS ──
+// ── ROOMS (cached) ──
 server.get('/api/rooms', async (req, res) => {
   try {
+    const cached = getCached('rooms');
+    if (cached) return res.json(cached);
+
     const [roomsRes, presenceRes] = await Promise.all([
-      supabase.from('rooms').select('*').order('order'),
+      supabase.from('rooms').select('id, name, description, icon, order').order('order'),
       supabase.from('room_presence').select('room_id'),
     ]);
 
@@ -285,6 +358,8 @@ server.get('/api/rooms', async (req, res) => {
       order: r.order || 0,
       online: onlineMap[r.id] || 0,
     }));
+
+    setCache('rooms', rooms);
     res.json(rooms);
   } catch (e) {
     res.status(500).json({ error: e.message });
@@ -296,12 +371,15 @@ server.get('/api/rooms/:roomId/messages', async (req, res) => {
   try {
     const limit = Math.min(parseInt(req.query.limit || '200'), 500);
     const roomId = req.params.roomId;
+    const cacheKey = `room-msgs:${roomId}:${limit}`;
+    const cached = getCached(cacheKey);
+    if (cached) return res.json(cached);
 
     const [roomRes, msgsRes] = await Promise.all([
-      supabase.from('rooms').select('*').eq('id', roomId).single(),
+      supabase.from('rooms').select('id, name, description, icon').eq('id', roomId).single(),
       supabase
         .from('messages')
-        .select('*')
+        .select('id, sender_id, sender_name, sender_gender, text, type, image_data, created_at')
         .eq('room_id', roomId)
         .order('created_at', { ascending: false })
         .limit(limit),
@@ -323,7 +401,9 @@ server.get('/api/rooms/:roomId/messages', async (req, res) => {
       }))
       .reverse();
 
-    res.json({ roomId, meta: roomRes.data, messages });
+    const result = { roomId, meta: roomRes.data, messages };
+    setCache(cacheKey, result);
+    res.json(result);
   } catch (e) {
     res.status(500).json({ error: e.message });
   }
@@ -332,9 +412,12 @@ server.get('/api/rooms/:roomId/messages', async (req, res) => {
 // ── REPORTS ──
 server.get('/api/reports', async (req, res) => {
   try {
+    const cached = getCached('reports');
+    if (cached) return res.json(cached);
+
     const { data, error } = await supabase
       .from('reports')
-      .select('*')
+      .select('id, reporter_id, reported_id, reason, created_at')
       .order('created_at', { ascending: false })
       .limit(200);
     if (error) throw error;
@@ -346,6 +429,8 @@ server.get('/api/reports', async (req, res) => {
       reason: r.reason || '',
       timestamp: TS(r.created_at),
     }));
+
+    setCache('reports', reports);
     res.json(reports);
   } catch (e) {
     res.status(500).json({ error: e.message });

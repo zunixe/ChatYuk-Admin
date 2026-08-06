@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, memo } from 'react';
 
 const API = '';
 
@@ -24,13 +24,13 @@ const timeAgo = (iso) => {
   return `${Math.floor(diff / 86400)}h lalu`;
 };
 
-function StatusBadge({ status }) {
+const StatusBadge = memo(function StatusBadge({ status }) {
   const cls = status === 'online' ? 'status-online' : status === 'idle' ? 'status-idle' : 'status-offline';
   const dot = status === 'online' ? '●' : status === 'idle' ? '◐' : '○';
   return <span className={cls} style={{ fontWeight: 700, fontSize: 13 }}>{dot} {status}</span>;
-}
+});
 
-function Bubble({ m, meId, names }) {
+const Bubble = memo(function Bubble({ m, meId, names }) {
   const isMe = m.senderId === meId;
   return (
     <div style={{ display: 'flex', justifyContent: isMe ? 'flex-end' : 'flex-start', marginBottom: 12 }}>
@@ -58,7 +58,7 @@ function Bubble({ m, meId, names }) {
       </div>
     </div>
   );
-}
+});
 
 function MessagesModal({ title, messages, meId, names, onClose }) {
   return (
@@ -188,7 +188,7 @@ function UserModal({ user, onClose, onOpenChat }) {
   );
 }
 
-function UsersTab({ users, onOpenUser }) {
+const UsersTab = memo(function UsersTab({ users, onOpenUser }) {
   const [q, setQ] = useState('');
   const [filter, setFilter] = useState('all');
   const filtered = users.filter((u) => {
@@ -253,9 +253,9 @@ function UsersTab({ users, onOpenUser }) {
       </table>
     </div>
   );
-}
+});
 
-function PrivateChatsTab({ onOpenChat }) {
+const PrivateChatsTab = memo(function PrivateChatsTab({ onOpenChat }) {
   const [chats, setChats] = useState([]);
   const refresh = useCallback(() => {
     fetch(`${API}/api/private-chats`)
@@ -302,9 +302,9 @@ function PrivateChatsTab({ onOpenChat }) {
       </tbody>
     </table>
   );
-}
+});
 
-function RoomsTab({ onOpenRoom }) {
+const RoomsTab = memo(function RoomsTab({ onOpenRoom }) {
   const [rooms, setRooms] = useState([]);
   useEffect(() => {
     const refresh = () => {
@@ -358,7 +358,7 @@ function RoomsTab({ onOpenRoom }) {
       </tbody>
     </table>
   );
-}
+});
 
 function App() {
   const [tab, setTab] = useState('dashboard');
@@ -374,7 +374,7 @@ function App() {
   }, []);
   useEffect(() => {
     refreshAll();
-    const t = setInterval(refreshAll, 10000);
+    const t = setInterval(refreshAll, 30000);
     return () => clearInterval(t);
   }, [refreshAll]);
 
