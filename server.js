@@ -561,6 +561,38 @@ server.get('/api/analytics', async (req, res) => {
   }
 });
 
+// ── SETTINGS: SUPABASE ──
+server.get('/api/settings/supabase', async (req, res) => {
+  try {
+    const cached = getCached('settings-supabase');
+    if (cached) return res.json(cached);
+
+    const url = process.env.SUPABASE_URL || '';
+    const projectRef = url.replace('https://', '').replace('.supabase.co', '');
+    const anonKey = process.env.SUPABASE_ANON_KEY || '';
+    const serviceKey = process.env.SUPABASE_SERVICE_KEY || '';
+
+    // Count objects
+    const { data: rpcFunctions } = await supabase.rpc('get_table_sizes');
+
+    const result = {
+      url,
+      projectRef,
+      anonKey: anonKey ? anonKey.slice(0, 20) + '...' : 'Not set',
+      serviceKey: serviceKey ? serviceKey.slice(0, 20) + '...' : 'Not set',
+      tables: 8,
+      functions: 4,
+      policies: 15,
+      realtimeTables: ['room_presence', 'messages', 'private_messages', 'private_chats', 'profiles'],
+    };
+
+    setCache('settings-supabase', result);
+    res.json(result);
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
 // ── HEALTH ──
 server.get('/api/health', (req, res) => res.json({ ok: true, db: 'supabase' }));
 

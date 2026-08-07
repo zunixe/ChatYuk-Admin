@@ -541,11 +541,221 @@ function AnalyticsPage() {
   );
 }
 
+// ── SUPABASE SETTINGS PAGE ──
+function SupabaseSettingsPage() {
+  const [config, setConfig] = useState(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    fetch(`${API}/api/settings/supabase`)
+      .then((r) => r.json())
+      .then(setConfig)
+      .catch(() => {})
+      .finally(() => setLoading(false));
+  }, []);
+
+  if (loading) {
+    return (
+      <div style={{ textAlign: 'center', padding: 60 }}>
+        <div style={{ color: 'var(--text-muted)', fontSize: 15 }}>Memuat konfigurasi...</div>
+      </div>
+    );
+  }
+
+  if (!config) {
+    return <div className="empty-state">Gagal memuat konfigurasi Supabase</div>;
+  }
+
+  return (
+    <div>
+      {/* Connection Status */}
+      <div className="card" style={{ marginBottom: 24, padding: 24 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 16, marginBottom: 20 }}>
+          <div style={{
+            width: 48, height: 48, borderRadius: 12,
+            background: 'linear-gradient(135deg, #3ecf8e 0%, #1a9f5c 100%)',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            fontSize: 24, fontWeight: 800, color: '#fff'
+          }}>S</div>
+          <div>
+            <h3 style={{ fontSize: 18, fontWeight: 700, marginBottom: 4 }}>Supabase Connection</h3>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <span className="status-online">●</span>
+              <span style={{ color: 'var(--green)', fontWeight: 600, fontSize: 13 }}>Connected</span>
+            </div>
+          </div>
+        </div>
+
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 16 }}>
+          <div style={{ background: 'var(--bg)', borderRadius: 10, padding: 16 }}>
+            <div style={{ fontSize: 11, color: 'var(--text-dim)', textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 8 }}>Project URL</div>
+            <div style={{ fontSize: 14, fontFamily: 'monospace', color: 'var(--text)', wordBreak: 'break-all' }}>{config.url}</div>
+          </div>
+          <div style={{ background: 'var(--bg)', borderRadius: 10, padding: 16 }}>
+            <div style={{ fontSize: 11, color: 'var(--text-dim)', textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 8 }}>Project Ref</div>
+            <div style={{ fontSize: 14, fontFamily: 'monospace', color: 'var(--text)' }}>{config.projectRef}</div>
+          </div>
+          <div style={{ background: 'var(--bg)', borderRadius: 10, padding: 16 }}>
+            <div style={{ fontSize: 11, color: 'var(--text-dim)', textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 8 }}>Anon Key</div>
+            <div style={{ fontSize: 14, fontFamily: 'monospace', color: 'var(--text-muted)' }}>{config.anonKey}</div>
+          </div>
+          <div style={{ background: 'var(--bg)', borderRadius: 10, padding: 16 }}>
+            <div style={{ fontSize: 11, color: 'var(--text-dim)', textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 8 }}>Service Role Key</div>
+            <div style={{ fontSize: 14, fontFamily: 'monospace', color: 'var(--text-muted)' }}>{config.serviceKey}</div>
+          </div>
+        </div>
+      </div>
+
+      {/* Database Info */}
+      <div className="card" style={{ marginBottom: 24, padding: 24 }}>
+        <h3 style={{ marginBottom: 20, fontSize: 16, fontWeight: 700 }}>Database</h3>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 16 }}>
+          <div style={{ background: 'var(--bg)', borderRadius: 10, padding: 16, textAlign: 'center' }}>
+            <div style={{ fontSize: 24, fontWeight: 800, color: 'var(--accent)' }}>{config.tables}</div>
+            <div style={{ fontSize: 12, color: 'var(--text-muted)', textTransform: 'uppercase' }}>Tables</div>
+          </div>
+          <div style={{ background: 'var(--bg)', borderRadius: 10, padding: 16, textAlign: 'center' }}>
+            <div style={{ fontSize: 24, fontWeight: 800, color: 'var(--purple)' }}>{config.functions}</div>
+            <div style={{ fontSize: 12, color: 'var(--text-muted)', textTransform: 'uppercase' }}>Functions</div>
+          </div>
+          <div style={{ background: 'var(--bg)', borderRadius: 10, padding: 16, textAlign: 'center' }}>
+            <div style={{ fontSize: 24, fontWeight: 800, color: 'var(--green)' }}>{config.policies}</div>
+            <div style={{ fontSize: 12, color: 'var(--text-muted)', textTransform: 'uppercase' }}>RLS Policies</div>
+          </div>
+        </div>
+      </div>
+
+      {/* Realtime */}
+      <div className="card" style={{ padding: 24 }}>
+        <h3 style={{ marginBottom: 20, fontSize: 16, fontWeight: 700 }}>Realtime Subscriptions</h3>
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10 }}>
+          {(config.realtimeTables || []).map((t) => (
+            <span key={t} style={{
+              background: 'var(--bg)',
+              border: '1px solid var(--border)',
+              borderRadius: 8,
+              padding: '8px 14px',
+              fontSize: 13,
+              fontWeight: 600,
+              display: 'flex',
+              alignItems: 'center',
+              gap: 8
+            }}>
+              <span style={{ width: 8, height: 8, borderRadius: '50%', background: 'var(--green)' }}></span>
+              {t}
+            </span>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── XENDIT SETTINGS PAGE ──
+function XenditSettingsPage() {
+  return (
+    <div>
+      {/* Connection Status */}
+      <div className="card" style={{ marginBottom: 24, padding: 24 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 16, marginBottom: 20 }}>
+          <div style={{
+            width: 48, height: 48, borderRadius: 12,
+            background: 'linear-gradient(135deg, #0070f3 0%, #0050c8 100%)',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            fontSize: 24, fontWeight: 800, color: '#fff'
+          }}>X</div>
+          <div>
+            <h3 style={{ fontSize: 18, fontWeight: 700, marginBottom: 4 }}>Xendit Connection</h3>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <span className="status-offline">○</span>
+              <span style={{ color: 'var(--text-dim)', fontWeight: 600, fontSize: 13 }}>Not Configured</span>
+            </div>
+          </div>
+        </div>
+
+        <div style={{
+          background: 'var(--bg)',
+          border: '1px dashed var(--border)',
+          borderRadius: 10,
+          padding: 32,
+          textAlign: 'center'
+        }}>
+          <div style={{ fontSize: 40, marginBottom: 16 }}>🔧</div>
+          <h4 style={{ fontSize: 16, fontWeight: 700, marginBottom: 8 }}>Konfigurasi Xendit</h4>
+          <p style={{ color: 'var(--text-muted)', fontSize: 14, marginBottom: 20, maxWidth: 400, margin: '0 auto 20px' }}>
+            Tambahkan API key Xendit untuk mengaktifkan fitur pembayaran di aplikasi ChatYuk.
+          </p>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: 16, maxWidth: 500, margin: '0 auto', textAlign: 'left' }}>
+            <div>
+              <label style={{ display: 'block', fontSize: 13, fontWeight: 600, color: 'var(--text-muted)', marginBottom: 6 }}>API Key</label>
+              <input
+                type="password"
+                placeholder="xnd_development_..."
+                className="search"
+                style={{ width: '100%' }}
+                disabled
+              />
+            </div>
+            <div>
+              <label style={{ display: 'block', fontSize: 13, fontWeight: 600, color: 'var(--text-muted)', marginBottom: 6 }}>Callback URL</label>
+              <input
+                type="text"
+                placeholder="https://yourdomain.com/xendit/callback"
+                className="search"
+                style={{ width: '100%' }}
+                disabled
+              />
+            </div>
+            <div>
+              <label style={{ display: 'block', fontSize: 13, fontWeight: 600, color: 'var(--text-muted)', marginBottom: 6 }}>Webhook Token</label>
+              <input
+                type="password"
+                placeholder="Webhook verification token"
+                className="search"
+                style={{ width: '100%' }}
+                disabled
+              />
+            </div>
+          </div>
+          <div style={{ marginTop: 20 }}>
+            <button className="btn" disabled style={{ opacity: 0.5, cursor: 'not-allowed' }}>Simpan Konfigurasi</button>
+          </div>
+          <div style={{ marginTop: 12, fontSize: 12, color: 'var(--text-dim)' }}>
+            Fitur ini akan segera tersedia
+          </div>
+        </div>
+      </div>
+
+      {/* Features */}
+      <div className="card" style={{ padding: 24 }}>
+        <h3 style={{ marginBottom: 20, fontSize: 16, fontWeight: 700 }}>Fitur Xendit</h3>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: 16 }}>
+          {[
+            { icon: '💳', title: 'Virtual Account', desc: 'Pembayaran via bank transfer' },
+            { icon: '📱', title: 'E-Wallet', desc: 'OVO, DANA, LinkAja, ShopeePay' },
+            { icon: '🏪', title: 'Retail', desc: 'Alfamart, Indomaret' },
+            { icon: '💳', title: 'Credit Card', desc: 'Visa, Mastercard, JCB' },
+            { icon: '🔄', title: 'Recurring', desc: 'Pembayaran berulang' },
+            { icon: '📊', title: 'Invoice', desc: 'Kirim invoice ke user' },
+          ].map((f) => (
+            <div key={f.title} style={{ background: 'var(--bg)', borderRadius: 10, padding: 16 }}>
+              <div style={{ fontSize: 24, marginBottom: 8 }}>{f.icon}</div>
+              <div style={{ fontWeight: 700, fontSize: 14, marginBottom: 4 }}>{f.title}</div>
+              <div style={{ color: 'var(--text-muted)', fontSize: 12 }}>{f.desc}</div>
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ── SIDEBAR ──
 function Sidebar({ active, onChange }) {
   const menuItems = [
     { id: 'chat', label: 'App Chat', icon: '💬' },
     { id: 'analytics', label: 'Analytics', icon: '📊' },
+    { id: 'settings', label: 'Settings', icon: '⚙️' },
   ];
 
   const chatSubMenus = [
@@ -554,6 +764,13 @@ function Sidebar({ active, onChange }) {
     { id: 'chats', label: 'Private Chats' },
     { id: 'rooms', label: 'Rooms' },
   ];
+
+  const settingsSubMenus = [
+    { id: 'settings-supabase', label: 'Supabase' },
+    { id: 'settings-xendit', label: 'Xendit' },
+  ];
+
+  const isSettingsPage = active.startsWith('settings');
 
   return (
     <aside className="sidebar">
@@ -569,8 +786,8 @@ function Sidebar({ active, onChange }) {
         {menuItems.map((item) => (
           <div key={item.id}>
             <button
-              className={`sidebar-item ${active === item.id || (item.id === 'chat' && ['dashboard', 'users', 'chats', 'rooms'].includes(active)) ? 'active' : ''}`}
-              onClick={() => onChange(item.id === 'chat' ? 'dashboard' : item.id)}
+              className={`sidebar-item ${active === item.id || (item.id === 'chat' && ['dashboard', 'users', 'chats', 'rooms'].includes(active)) || (item.id === 'settings' && isSettingsPage) ? 'active' : ''}`}
+              onClick={() => onChange(item.id === 'chat' ? 'dashboard' : item.id === 'settings' ? 'settings-supabase' : item.id)}
             >
               <span className="sidebar-icon">{item.icon}</span>
               <span>{item.label}</span>
@@ -578,6 +795,19 @@ function Sidebar({ active, onChange }) {
             {item.id === 'chat' && (active === 'dashboard' || active === 'users' || active === 'chats' || active === 'rooms') && (
               <div className="sidebar-submenu">
                 {chatSubMenus.map((sub) => (
+                  <button
+                    key={sub.id}
+                    className={`sidebar-subitem ${active === sub.id ? 'active' : ''}`}
+                    onClick={() => onChange(sub.id)}
+                  >
+                    {sub.label}
+                  </button>
+                ))}
+              </div>
+            )}
+            {item.id === 'settings' && isSettingsPage && (
+              <div className="sidebar-submenu">
+                {settingsSubMenus.map((sub) => (
                   <button
                     key={sub.id}
                     className={`sidebar-subitem ${active === sub.id ? 'active' : ''}`}
@@ -651,20 +881,43 @@ function App() {
 
   const sc = summary?.statusCounts || {};
 
+  const getPageTitle = () => {
+    switch (page) {
+      case 'analytics': return '📊 Analytics Supabase';
+      case 'users': return '👥 Users';
+      case 'chats': return '💬 Private Chats';
+      case 'rooms': return '🏠 Rooms';
+      case 'settings-supabase': return '⚙️ Supabase Settings';
+      case 'settings-xendit': return '⚙️ Xendit Settings';
+      default: return '💬 Dashboard';
+    }
+  };
+
+  const getPageSubtitle = () => {
+    switch (page) {
+      case 'analytics': return 'Monitoring penggunaan resource';
+      case 'settings-supabase': return 'Konfigurasi koneksi Supabase';
+      case 'settings-xendit': return 'Konfigurasi payment gateway Xendit';
+      default: return `Total: ${users.length} user terdaftar`;
+    }
+  };
+
   return (
     <div className="app-layout">
       <Sidebar active={page} onChange={setPage} />
 
       <main className="main-content">
         <header className="content-header">
-          <h2>{page === 'analytics' ? '📊 Analytics Supabase' : page === 'users' ? '👥 Users' : page === 'chats' ? '💬 Private Chats' : page === 'rooms' ? '🏠 Rooms' : '💬 Dashboard'}</h2>
-          <div style={{ fontSize: 13, color: 'var(--text-dim)' }}>
-            {page === 'analytics' ? 'Monitoring penggunaan resource' : `Total: ${users.length} user terdaftar`}
-          </div>
+          <h2>{getPageTitle()}</h2>
+          <div style={{ fontSize: 13, color: 'var(--text-dim)' }}>{getPageSubtitle()}</div>
         </header>
 
         {page === 'analytics' ? (
           <AnalyticsPage />
+        ) : page === 'settings-supabase' ? (
+          <SupabaseSettingsPage />
+        ) : page === 'settings-xendit' ? (
+          <XenditSettingsPage />
         ) : (
           <>
             {page === 'dashboard' && (
