@@ -458,6 +458,29 @@ server.get('/api/analytics', async (req, res) => {
       supabase.from('blocks').select('blocker_id', { count: 'exact', head: true }),
     ]);
 
+    // Get chat data and photo data sizes using length()
+    const [msgTextRes, msgImgRes, pvtTextRes, pvtImgRes] = await Promise.all([
+      supabase.from('messages').select('text').neq('text', ''),
+      supabase.from('messages').select('image_data').neq('image_data', ''),
+      supabase.from('private_messages').select('text').neq('text', ''),
+      supabase.from('private_messages').select('image_data').neq('image_data', ''),
+    ]);
+
+    let chatDataSize = 0;
+    let photoDataSize = 0;
+    let totalMessages = 0;
+    let totalPhotos = 0;
+
+    // Calculate text sizes
+    (msgTextRes.data || []).forEach((r) => { if (r.text) chatDataSize += r.text.length; });
+    (pvtTextRes.data || []).forEach((r) => { if (r.text) chatDataSize += r.text.length; });
+    totalMessages = (msgTextRes.data || []).length + (pvtTextRes.data || []).length;
+
+    // Calculate image sizes
+    (msgImgRes.data || []).forEach((r) => { if (r.image_data) photoDataSize += r.image_data.length; });
+    (pvtImgRes.data || []).forEach((r) => { if (r.image_data) photoDataSize += r.image_data.length; });
+    totalPhotos = (msgImgRes.data || []).length + (pvtImgRes.data || []).length;
+
     // Build table info
     const tables = [
       { name: 'profiles', rows: profiles.count || 0 },
@@ -482,6 +505,15 @@ server.get('/api/analytics', async (req, res) => {
       });
     }
 
+    // Format bytes to human readable
+    const formatBytes = (bytes) => {
+      if (bytes === 0) return '0 B';
+      const k = 1024;
+      const sizes = ['B', 'KB', 'MB', 'GB'];
+      const i = Math.floor(Math.log(bytes) / Math.log(k));
+      return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+    };
+
     // Free tier limits (Supabase)
     const result = {
       database: {
@@ -502,6 +534,16 @@ server.get('/api/analytics', async (req, res) => {
       mau: {
         current: 3,
         limit: '50,000',
+      },
+      chatData: {
+        size: formatBytes(chatDataSize),
+        sizeBytes: chatDataSize,
+        messages: totalMessages,
+      },
+      photoData: {
+        size: formatBytes(photoDataSize),
+        sizeBytes: photoDataSize,
+        photos: totalPhotos,
       },
       tables,
       objects: {

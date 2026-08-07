@@ -443,6 +443,51 @@ function AnalyticsPage() {
         </div>
       </div>
 
+      {/* Data Breakdown */}
+      <div className="cards" style={{ marginBottom: 24 }}>
+        <div className="card" style={{ borderTop: '3px solid var(--yellow)' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12 }}>
+            <span style={{ fontSize: 24 }}>💬</span>
+            <div className="lbl" style={{ margin: 0 }}>Data Chat (Teks)</div>
+          </div>
+          <div className="num" style={{ fontSize: 28 }}>{stats.chatData?.size || '0 B'}</div>
+          <div style={{ fontSize: 13, color: 'var(--text-muted)', marginTop: 8 }}>
+            {stats.chatData?.messages?.toLocaleString() || 0} pesan teks
+          </div>
+        </div>
+
+        <div className="card" style={{ borderTop: '3px solid var(--pink)' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12 }}>
+            <span style={{ fontSize: 24 }}>📷</span>
+            <div className="lbl" style={{ margin: 0 }}>Data Foto (Base64)</div>
+          </div>
+          <div className="num" style={{ fontSize: 28 }}>{stats.photoData?.size || '0 B'}</div>
+          <div style={{ fontSize: 13, color: 'var(--text-muted)', marginTop: 8 }}>
+            {stats.photoData?.photos?.toLocaleString() || 0} foto
+          </div>
+        </div>
+
+        <div className="card" style={{ borderTop: '3px solid var(--red)' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12 }}>
+            <span style={{ fontSize: 24 }}>📦</span>
+            <div className="lbl" style={{ margin: 0 }}>Total Data</div>
+          </div>
+          <div className="num" style={{ fontSize: 28 }}>
+            {(() => {
+              const total = (stats.chatData?.sizeBytes || 0) + (stats.photoData?.sizeBytes || 0);
+              if (total === 0) return '0 B';
+              const k = 1024;
+              const sizes = ['B', 'KB', 'MB', 'GB'];
+              const i = Math.floor(Math.log(total) / Math.log(k));
+              return parseFloat((total / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+            })()}
+          </div>
+          <div style={{ fontSize: 13, color: 'var(--text-muted)', marginTop: 8 }}>
+            {(stats.chatData?.messages || 0) + (stats.photoData?.photos || 0)} total items
+          </div>
+        </div>
+      </div>
+
       {/* Table Sizes */}
       <div className="card" style={{ marginBottom: 24, padding: 24 }}>
         <h3 style={{ marginBottom: 20, fontSize: 16, fontWeight: 700 }}>Ukuran Tabel</h3>
