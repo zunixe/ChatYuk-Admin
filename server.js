@@ -350,14 +350,21 @@ server.get('/api/rooms', async (req, res) => {
       onlineMap[rp.room_id] = (onlineMap[rp.room_id] || 0) + 1;
     });
 
-    const rooms = (roomsRes.data || []).map((r) => ({
-      id: r.id,
-      name: r.name || r.id,
-      description: r.description || '',
-      icon: r.icon || '💬',
-      order: r.order || 0,
-      online: onlineMap[r.id] || 0,
-    }));
+    const rooms = (roomsRes.data || []).map((r) => {
+      // Extract country from room ID (e.g., "Indonesia_general" -> "Indonesia")
+      const parts = r.id.split('_');
+      const country = parts.length > 1 ? parts[0] : 'Unknown';
+      
+      return {
+        id: r.id,
+        name: r.name || r.id,
+        description: r.description || '',
+        icon: r.icon || '💬',
+        order: r.order || 0,
+        country,
+        online: onlineMap[r.id] || 0,
+      };
+    });
 
     setCache('rooms', rooms);
     res.json(rooms);

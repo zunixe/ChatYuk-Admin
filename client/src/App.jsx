@@ -306,6 +306,8 @@ const PrivateChatsTab = memo(function PrivateChatsTab({ onOpenChat }) {
 
 const RoomsTab = memo(function RoomsTab({ onOpenRoom }) {
   const [rooms, setRooms] = useState([]);
+  const [countryFilter, setCountryFilter] = useState('all');
+  
   useEffect(() => {
     const refresh = () => {
       fetch(`${API}/api/rooms`)
@@ -317,46 +319,105 @@ const RoomsTab = memo(function RoomsTab({ onOpenRoom }) {
     const t = setInterval(refresh, 15000);
     return () => clearInterval(t);
   }, []);
+
+  // Get unique countries
+  const countries = [...new Set(rooms.map(r => r.country))].sort();
+  
+  // Filter rooms by country
+  const filteredRooms = countryFilter === 'all' 
+    ? rooms 
+    : rooms.filter(r => r.country === countryFilter);
+
   return (
-    <table className="tbl">
-      <thead>
-        <tr>
-          <th>Room</th>
-          <th>Deskripsi</th>
-          <th>Online</th>
-          <th></th>
-        </tr>
-      </thead>
-      <tbody>
-        {rooms.map((r) => (
-          <tr key={r.id}>
-            <td>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                <span style={{ fontSize: 20 }}>{r.icon}</span>
-                <span style={{ fontWeight: 600 }}>{r.name}</span>
-              </div>
-            </td>
-            <td style={{ color: 'var(--text-muted)', fontSize: 13 }}>{r.description}</td>
-            <td>
-              <span style={{
-                background: r.online > 0 ? 'var(--green-glow)' : 'var(--bg)',
-                color: r.online > 0 ? 'var(--green)' : 'var(--text-dim)',
-                padding: '4px 12px',
-                borderRadius: 20,
-                fontSize: 13,
-                fontWeight: 700,
-              }}>
-                {r.online}
-              </span>
-            </td>
-            <td><button className="btn" onClick={() => onOpenRoom(r)}>Lihat Pesan</button></td>
+    <div>
+      <div className="toolbar">
+        <select 
+          value={countryFilter} 
+          onChange={(e) => setCountryFilter(e.target.value)} 
+          className="search" 
+          style={{ minWidth: 200 }}
+        >
+          <option value="all">Semua Negara</option>
+          {countries.map(c => (
+            <option key={c} value={c}>{c}</option>
+          ))}
+        </select>
+        <div style={{ 
+          display: 'flex', 
+          alignItems: 'center', 
+          gap: 8, 
+          padding: '0 12px',
+          background: 'var(--bg-card)',
+          border: '1px solid var(--border)',
+          borderRadius: 'var(--radius-sm)',
+          fontSize: 13,
+          color: 'var(--text-muted)'
+        }}>
+          <span style={{ fontWeight: 700, color: 'var(--accent)' }}>{filteredRooms.length}</span> room
+        </div>
+      </div>
+      <table className="tbl">
+        <thead>
+          <tr>
+            <th>Room</th>
+            <th>Negara</th>
+            <th>Deskripsi</th>
+            <th>Online</th>
+            <th></th>
           </tr>
-        ))}
-        {rooms.length === 0 && (
-          <tr><td colSpan={4} className="empty-state">Belum ada room</td></tr>
-        )}
-      </tbody>
-    </table>
+        </thead>
+        <tbody>
+          {filteredRooms.map((r) => (
+            <tr key={r.id}>
+              <td>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                  <span style={{ fontSize: 20 }}>{r.icon}</span>
+                  <span style={{ fontWeight: 600 }}>{r.name}</span>
+                </div>
+              </td>
+              <td>
+                <span style={{ 
+                  background: 'var(--bg)', 
+                  padding: '4px 10px', 
+                  borderRadius: 6, 
+                  fontSize: 12,
+                  fontWeight: 600,
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: 6
+                }}>
+                  <span style={{ 
+                    width: 16, 
+                    height: 12, 
+                    borderRadius: 2,
+                    background: 'var(--accent)',
+                    display: 'inline-block'
+                  }}></span>
+                  {r.country}
+                </span>
+              </td>
+              <td style={{ color: 'var(--text-muted)', fontSize: 13 }}>{r.description}</td>
+              <td>
+                <span style={{
+                  background: r.online > 0 ? 'var(--green-glow)' : 'var(--bg)',
+                  color: r.online > 0 ? 'var(--green)' : 'var(--text-dim)',
+                  padding: '4px 12px',
+                  borderRadius: 20,
+                  fontSize: 13,
+                  fontWeight: 700,
+                }}>
+                  {r.online}
+                </span>
+              </td>
+              <td><button className="btn" onClick={() => onOpenRoom(r)}>Lihat Pesan</button></td>
+            </tr>
+          ))}
+          {filteredRooms.length === 0 && (
+            <tr><td colSpan={5} className="empty-state">Tidak ada room untuk negara ini</td></tr>
+          )}
+        </tbody>
+      </table>
+    </div>
   );
 });
 
