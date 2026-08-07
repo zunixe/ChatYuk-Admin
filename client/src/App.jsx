@@ -750,6 +750,137 @@ function XenditSettingsPage() {
   );
 }
 
+// ── QRIS SETTINGS PAGE ──
+function QRISSettingsPage() {
+  return (
+    <div>
+      {/* Connection Status */}
+      <div className="card" style={{ marginBottom: 24, padding: 24 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 16, marginBottom: 20 }}>
+          <div style={{
+            width: 48, height: 48, borderRadius: 12,
+            background: 'linear-gradient(135deg, #00a651 0%, #008c44 100%)',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            fontSize: 24, fontWeight: 800, color: '#fff'
+          }}>Q</div>
+          <div>
+            <h3 style={{ fontSize: 18, fontWeight: 700, marginBottom: 4 }}>QRIS Connection</h3>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <span className="status-offline">○</span>
+              <span style={{ color: 'var(--text-dim)', fontWeight: 600, fontSize: 13 }}>Not Configured</span>
+            </div>
+          </div>
+        </div>
+
+        <div style={{
+          background: 'var(--bg)',
+          border: '1px dashed var(--border)',
+          borderRadius: 10,
+          padding: 32,
+          textAlign: 'center'
+        }}>
+          <div style={{ fontSize: 40, marginBottom: 16 }}>📱</div>
+          <h4 style={{ fontSize: 16, fontWeight: 700, marginBottom: 8 }}>Konfigurasi QRIS</h4>
+          <p style={{ color: 'var(--text-muted)', fontSize: 14, marginBottom: 20, maxWidth: 400, margin: '0 auto 20px' }}>
+            Tambahkan kredensial QRIS untuk mengaktifkan pembayaran QR Code di aplikasi ChatYuk.
+          </p>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: 16, maxWidth: 500, margin: '0 auto', textAlign: 'left' }}>
+            <div>
+              <label style={{ display: 'block', fontSize: 13, fontWeight: 600, color: 'var(--text-muted)', marginBottom: 6 }}>Merchant ID</label>
+              <input
+                type="text"
+                placeholder="ID Merchant QRIS"
+                className="search"
+                style={{ width: '100%' }}
+                disabled
+              />
+            </div>
+            <div>
+              <label style={{ display: 'block', fontSize: 13, fontWeight: 600, color: 'var(--text-muted)', marginBottom: 6 }}>API Key</label>
+              <input
+                type="password"
+                placeholder="API Key QRIS"
+                className="search"
+                style={{ width: '100%' }}
+                disabled
+              />
+            </div>
+            <div>
+              <label style={{ display: 'block', fontSize: 13, fontWeight: 600, color: 'var(--text-muted)', marginBottom: 6 }}>Callback URL</label>
+              <input
+                type="text"
+                placeholder="https://yourdomain.com/qris/callback"
+                className="search"
+                style={{ width: '100%' }}
+                disabled
+              />
+            </div>
+          </div>
+          <div style={{ marginTop: 20 }}>
+            <button className="btn" disabled style={{ opacity: 0.5, cursor: 'not-allowed' }}>Simpan Konfigurasi</button>
+          </div>
+          <div style={{ marginTop: 12, fontSize: 12, color: 'var(--text-dim)' }}>
+            Fitur ini akan segera tersedia
+          </div>
+        </div>
+      </div>
+
+      {/* QRIS Info */}
+      <div className="card" style={{ marginBottom: 24, padding: 24 }}>
+        <h3 style={{ marginBottom: 20, fontSize: 16, fontWeight: 700 }}>Tentang QRIS</h3>
+        <div style={{ color: 'var(--text-muted)', fontSize: 14, lineHeight: 1.7 }}>
+          <p style={{ marginBottom: 12 }}>
+            <strong>QRIS</strong> (Quick Response Code Indonesian Standard) adalah standar QR Code untuk pembayaran di Indonesia yang dikeluarkan oleh Bank Indonesia dan Asosiasi Sistem Pembayaran Indonesia (ASPI).
+          </p>
+          <p style={{ marginBottom: 12 }}>
+            Dengan QRIS, pengguna ChatYuk dapat melakukan pembayaran menggunakan aplikasi e-wallet atau mobile banking apapun yang mendukung QRIS.
+          </p>
+        </div>
+      </div>
+
+      {/* Supported Apps */}
+      <div className="card" style={{ padding: 24 }}>
+        <h3 style={{ marginBottom: 20, fontSize: 16, fontWeight: 700 }}>Aplikasi yang Mendukung QRIS</h3>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(150px, 1fr))', gap: 12 }}>
+          {[
+            { name: 'GoPay', color: '#00AA13' },
+            { name: 'OVO', color: '#4C3494' },
+            { name: 'DANA', color: '#108EE9' },
+            { name: 'ShopeePay', color: '#EE4D2D' },
+            { name: 'LinkAja', color: '#ED1C24' },
+            { name: 'BCA Mobile', color: '#0033A0' },
+            { name: 'Mandiri', color: '#FFB81C' },
+            { name: 'BNI', color: '#ED8B16' },
+            { name: 'BRI', color: '#003D79' },
+            { name: 'CIMB Niaga', color: '#8B0000' },
+            { name: 'Danamon', color: '#003D79' },
+            { name: 'Permata', color: '#003D79' },
+          ].map((app) => (
+            <div key={app.name} style={{
+              background: 'var(--bg)',
+              border: '1px solid var(--border)',
+              borderRadius: 10,
+              padding: 14,
+              textAlign: 'center'
+            }}>
+              <div style={{
+                width: 40, height: 40, borderRadius: 10,
+                background: app.color,
+                margin: '0 auto 10px',
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                fontSize: 16, fontWeight: 800, color: '#fff'
+              }}>
+                {app.name[0]}
+              </div>
+              <div style={{ fontSize: 13, fontWeight: 600 }}>{app.name}</div>
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ── SIDEBAR ──
 function Sidebar({ active, onChange }) {
   const menuItems = [
@@ -768,6 +899,7 @@ function Sidebar({ active, onChange }) {
   const settingsSubMenus = [
     { id: 'settings-supabase', label: 'Supabase' },
     { id: 'settings-xendit', label: 'Xendit' },
+    { id: 'settings-qris', label: 'QRIS' },
   ];
 
   const isSettingsPage = active.startsWith('settings');
@@ -889,6 +1021,7 @@ function App() {
       case 'rooms': return '🏠 Rooms';
       case 'settings-supabase': return '⚙️ Supabase Settings';
       case 'settings-xendit': return '⚙️ Xendit Settings';
+      case 'settings-qris': return '⚙️ QRIS Settings';
       default: return '💬 Dashboard';
     }
   };
@@ -898,6 +1031,7 @@ function App() {
       case 'analytics': return 'Monitoring penggunaan resource';
       case 'settings-supabase': return 'Konfigurasi koneksi Supabase';
       case 'settings-xendit': return 'Konfigurasi payment gateway Xendit';
+      case 'settings-qris': return 'Konfigurasi pembayaran QR Code QRIS';
       default: return `Total: ${users.length} user terdaftar`;
     }
   };
@@ -918,6 +1052,8 @@ function App() {
           <SupabaseSettingsPage />
         ) : page === 'settings-xendit' ? (
           <XenditSettingsPage />
+        ) : page === 'settings-qris' ? (
+          <QRISSettingsPage />
         ) : (
           <>
             {page === 'dashboard' && (
