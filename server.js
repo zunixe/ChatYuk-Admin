@@ -129,7 +129,7 @@ server.get('/api/users', async (req, res) => {
 
     const { data, error } = await supabase
       .from('profiles')
-      .select('id, nickname, gender, age, country, city, ip_address, status, avatar, login_at, created_at, last_seen')
+      .select('id, nickname, gender, age, country, city, ip_address, status, avatar, login_at, created_at, last_seen, is_registered')
       .order('created_at', { ascending: false });
     if (error) throw error;
 
@@ -145,6 +145,7 @@ server.get('/api/users', async (req, res) => {
       createdAt: TS(u.created_at),
       status: u.status || 'offline',
       online: u.status === 'online',
+      isRegistered: !!u.is_registered,
       presenceLastSeen: TS(u.last_seen),
       hasAvatar: !!(u.avatar && u.avatar.length > 0),
     }));
@@ -234,6 +235,7 @@ server.get('/api/users/:uid', async (req, res) => {
       createdAt: TS(u.created_at),
       status: u.status || 'offline',
       online: u.status === 'online',
+      isRegistered: !!u.is_registered,
       presenceLastSeen: TS(u.last_seen),
       hasAvatar: !!(u.avatar && u.avatar.length > 0),
       avatar: u.avatar || '',

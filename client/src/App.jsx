@@ -191,14 +191,50 @@ function UserModal({ user, onClose, onOpenChat }) {
 const UsersTab = memo(function UsersTab({ users, onOpenUser }) {
   const [q, setQ] = useState('');
   const [filter, setFilter] = useState('all');
+  const [typeFilter, setTypeFilter] = useState('all');
+
+  const registered = users.filter((u) => u.isRegistered);
+  const guests = users.filter((u) => !u.isRegistered);
+
   const filtered = users.filter((u) => {
+    if (typeFilter === 'registered' && !u.isRegistered) return false;
+    if (typeFilter === 'guest' && u.isRegistered) return false;
     if (filter !== 'all' && u.status !== filter) return false;
     const s = `${u.nickname} ${u.country} ${u.city} ${u.ipAddress} ${u.uid}`.toLowerCase();
     return s.includes(q.toLowerCase());
   });
+
+  const typeButtons = [
+    { id: 'all', label: `Semua (${users.length})` },
+    { id: 'registered', label: `✓ Terdaftar (${registered.length})` },
+    { id: 'guest', label: `○ Guest (${guests.length})` },
+  ];
+
   return (
     <div>
       <div className="toolbar">
+        <div style={{ display: 'flex', gap: 6, background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)', padding: 4 }}>
+          {typeButtons.map((t) => (
+            <button
+              key={t.id}
+              onClick={() => setTypeFilter(t.id)}
+              style={{
+                background: typeFilter === t.id ? 'var(--accent)' : 'transparent',
+                color: typeFilter === t.id ? '#fff' : 'var(--text-muted)',
+                border: 'none',
+                borderRadius: 6,
+                padding: '8px 14px',
+                fontSize: 13,
+                fontWeight: 600,
+                cursor: 'pointer',
+                fontFamily: 'inherit',
+                transition: 'all 0.2s ease',
+              }}
+            >
+              {t.label}
+            </button>
+          ))}
+        </div>
         <input
           placeholder="Cari nickname / negara / IP / UID..."
           value={q}
@@ -221,6 +257,7 @@ const UsersTab = memo(function UsersTab({ users, onOpenUser }) {
             <th>Lokasi</th>
             <th>IP</th>
             <th>Status</th>
+            <th>Tipe</th>
             <th>Login</th>
             <th></th>
           </tr>
@@ -242,12 +279,33 @@ const UsersTab = memo(function UsersTab({ users, onOpenUser }) {
               <td>{u.city}, {u.country}</td>
               <td style={{ color: 'var(--text-dim)', fontSize: 12, fontFamily: 'monospace' }}>{u.ipAddress || '-'}</td>
               <td><StatusBadge status={u.status} /></td>
+              <td>
+                {u.isRegistered ? (
+                  <span style={{
+                    background: 'rgba(34, 197, 94, 0.15)',
+                    color: 'var(--green)',
+                    padding: '3px 10px',
+                    borderRadius: 20,
+                    fontSize: 12,
+                    fontWeight: 700,
+                  }}>✓ Terdaftar</span>
+                ) : (
+                  <span style={{
+                    background: 'rgba(148, 163, 184, 0.15)',
+                    color: 'var(--text-muted)',
+                    padding: '3px 10px',
+                    borderRadius: 20,
+                    fontSize: 12,
+                    fontWeight: 700,
+                  }}>○ Guest</span>
+                )}
+              </td>
               <td style={{ color: 'var(--text-dim)', fontSize: 13 }}>{timeAgo(u.loginAt)}</td>
               <td><button className="btn" onClick={() => onOpenUser(u)}>Detail</button></td>
             </tr>
           ))}
           {filtered.length === 0 && (
-            <tr><td colSpan={8} className="empty-state">Tidak ada user</td></tr>
+            <tr><td colSpan={9} className="empty-state">Tidak ada user</td></tr>
           )}
         </tbody>
       </table>
