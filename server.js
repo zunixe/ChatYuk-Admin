@@ -46,6 +46,18 @@ const TS = (v) => {
   return String(v);
 };
 
+// Derive status asli dari umur last_seen.
+// App update last_seen tiap 60s (heartbeat). Kalau app di-kill,
+// last_seen jadi basi -> status tampil offline walau DB bilang online.
+const STALE_MS = 5 * 60 * 1000; // 5 menit
+
+function deriveStatus(rawStatus, lastSeen) {
+  const ts = Date.parse(lastSeen);
+  if (!lastSeen || isNaN(ts)) return 'offline';
+  if (Date.now() - ts > STALE_MS) return 'offline';
+  return rawStatus || 'offline';
+}
+
 const DEFAULT_ROOMS = [
   { id: 'general', name: 'General', description: 'Obrolan umum untuk semua', icon: '💬', order: 1 },
   { id: 'curhat', name: 'Curhat', description: 'Cerita dan curhat bareng', icon: '🤗', order: 2 },
@@ -78,7 +90,7 @@ server.get('/api/summary', async (req, res) => {
     if (cached) return res.json(cached);
 
     const [profilesRes, chatsRes, roomsRes, presenceRes] = await Promise.all([
-      supabase.from('profiles').select('id, status', { count: 'exact' }),
+      supabase.from('profiles').select('id, status, last_seen', { count: 'exact' }),
       supabase.from('private_chats').select('chat_id', { count: 'exact' }),
       supabase.from('rooms').select('id, name, icon, order').order('order'),
       supabase.from('room_presence').select('room_id, user_id'),
@@ -91,7 +103,7 @@ server.get('/api/summary', async (req, res) => {
 
     const statusCounts = { online: 0, idle: 0, offline: 0 };
     (profilesRes.data || []).forEach((p) => {
-      const s = p.status || 'offline';
+      const s = deriveStatus(p.status, p.last_seen);
       if (statusCounts[s] != null) statusCounts[s]++;
     });
 
@@ -133,22 +145,25 @@ server.get('/api/users', async (req, res) => {
       .order('created_at', { ascending: false });
     if (error) throw error;
 
-    const users = (data || []).map((u) => ({
-      uid: u.id,
-      nickname: u.nickname || 'Anon',
-      gender: u.gender || '',
-      age: u.age || 0,
-      country: u.country || '',
-      city: u.city || '',
-      ipAddress: u.ip_address || '',
-      loginAt: TS(u.login_at),
-      createdAt: TS(u.created_at),
-      status: u.status || 'offline',
-      online: u.status === 'online',
-      isRegistered: !!u.is_registered,
-      presenceLastSeen: TS(u.last_seen),
-      hasAvatar: !!(u.avatar && u.avatar.length > 0),
-    }));
+    const users = (data || []).map((u) => {
+      const st = deriveStatus(u.status, u.last_seen);
+      return {
+        uid: u.id,
+        nickname: u.nickname || 'Anon',
+        gender: u.gender || '',
+        age: u.age || 0,
+        country: u.country || '',
+        city: u.city || '',
+        ipAddress: u.ip_address || '',
+        loginAt: TS(u.login_at),
+        createdAt: TS(u.created_at),
+        status: st,
+        online: st === 'online',
+        isRegistered: !!u.is_registered,
+        presenceLastSeen: TS(u.last_seen),
+        hasAvatar: !!(u.avatar && u.avatar.length > 0),
+      };
+    });
 
     setCache('users', users);
     res.json(users);
@@ -223,6 +238,7 @@ server.get('/api/users/:uid', async (req, res) => {
 
     chats.sort((a, b) => (b.lastMessageAt || '').localeCompare(a.lastMessageAt || ''));
 
+    const st = deriveStatus(u.status, u.last_seen);
     const result = {
       uid,
       nickname: u.nickname || 'Anon',
@@ -233,8 +249,8 @@ server.get('/api/users/:uid', async (req, res) => {
       ipAddress: u.ip_address || '',
       loginAt: TS(u.login_at),
       createdAt: TS(u.created_at),
-      status: u.status || 'offline',
-      online: u.status === 'online',
+      status: st,
+      online: st === 'online',
       isRegistered: !!u.is_registered,
       presenceLastSeen: TS(u.last_seen),
       hasAvatar: !!(u.avatar && u.avatar.length > 0),
