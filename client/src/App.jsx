@@ -1,6 +1,23 @@
-import { useEffect, useState, useCallback, memo } from 'react';
+import { useEffect, useState, useCallback, useMemo, useRef, memo } from 'react';
 
 const API = '';
+
+// Polling yang sadar visibility: berhenti nge-fetch saat tab di-background.
+function usePolling(callback, interval) {
+  const cb = useRef(callback);
+  cb.current = callback;
+  useEffect(() => {
+    cb.current();
+    if (!interval || interval <= 0) return;
+    const onVisible = () => { if (!document.hidden) cb.current(); };
+    document.addEventListener('visibilitychange', onVisible);
+    const t = setInterval(() => { if (!document.hidden) cb.current(); }, interval);
+    return () => {
+      document.removeEventListener('visibilitychange', onVisible);
+      clearInterval(t);
+    };
+  }, [interval]);
+}
 
 const fmt = (iso) => {
   if (!iso) return '-';
@@ -193,16 +210,19 @@ const UsersTab = memo(function UsersTab({ users, onOpenUser }) {
   const [filter, setFilter] = useState('all');
   const [typeFilter, setTypeFilter] = useState('all');
 
-  const registered = users.filter((u) => u.isRegistered);
-  const guests = users.filter((u) => !u.isRegistered);
+  const registered = useMemo(() => users.filter((u) => u.isRegistered), [users]);
+  const guests = useMemo(() => users.filter((u) => !u.isRegistered), [users]);
 
-  const filtered = users.filter((u) => {
-    if (typeFilter === 'registered' && !u.isRegistered) return false;
-    if (typeFilter === 'guest' && u.isRegistered) return false;
-    if (filter !== 'all' && u.status !== filter) return false;
-    const s = `${u.nickname} ${u.country} ${u.city} ${u.ipAddress} ${u.uid}`.toLowerCase();
-    return s.includes(q.toLowerCase());
-  });
+  const filtered = useMemo(() => {
+    const ql = q.toLowerCase();
+    return users.filter((u) => {
+      if (typeFilter === 'registered' && !u.isRegistered) return false;
+      if (typeFilter === 'guest' && u.isRegistered) return false;
+      if (filter !== 'all' && u.status !== filter) return false;
+      const s = `${u.nickname} ${u.country} ${u.city} ${u.ipAddress} ${u.uid}`.toLowerCase();
+      return s.includes(ql);
+    });
+  }, [users, q, filter, typeFilter]);
 
   const typeButtons = [
     { id: 'all', label: `Semua (${users.length})` },
@@ -321,11 +341,7 @@ const PrivateChatsTab = memo(function PrivateChatsTab({ onOpenChat }) {
       .then((d) => Array.isArray(d) && setChats(d))
       .catch(() => {});
   }, []);
-  useEffect(() => {
-    refresh();
-    const t = setInterval(refresh, 15000);
-    return () => clearInterval(t);
-  }, [refresh]);
+  usePolling(refresh, 15000);
 
   return (
     <table className="tbl">
@@ -366,17 +382,13 @@ const RoomsTab = memo(function RoomsTab({ onOpenRoom }) {
   const [rooms, setRooms] = useState([]);
   const [countryFilter, setCountryFilter] = useState('all');
   
-  useEffect(() => {
-    const refresh = () => {
-      fetch(`${API}/api/rooms`)
-        .then((r) => r.json())
-        .then((d) => Array.isArray(d) && setRooms(d))
-        .catch(() => {});
-    };
-    refresh();
-    const t = setInterval(refresh, 15000);
-    return () => clearInterval(t);
+  const refresh = useCallback(() => {
+    fetch(`${API}/api/rooms`)
+      .then((r) => r.json())
+      .then((d) => Array.isArray(d) && setRooms(d))
+      .catch(() => {});
   }, []);
+  usePolling(refresh, 15000);
 
   // Get unique countries
   const countries = [...new Set(rooms.map(r => r.country))].sort();
@@ -480,7 +492,7 @@ const RoomsTab = memo(function RoomsTab({ onOpenRoom }) {
 });
 
 // ── ANALYTICS PAGE ──
-function AnalyticsPage() {
+const AnalyticsPage = memo(function AnalyticsPage() {
   const [stats, setStats] = useState(null);
   const [loading, setLoading] = useState(true);
 
@@ -658,7 +670,7 @@ function AnalyticsPage() {
       </div>
     </div>
   );
-}
+});
 
 // ── SUPABASE SETTINGS PAGE ──
 function SupabaseSettingsPage() {
@@ -1001,7 +1013,7 @@ function QRISSettingsPage() {
 }
 
 // ── SIDEBAR ──
-function Sidebar({ active, onChange }) {
+const Sidebar = memo(function Sidebar({ active, onChange }) {
   const menuItems = [
     { id: 'chat', label: 'App Chat', icon: '💬' },
     { id: 'analytics', label: 'Analytics', icon: '📊' },
@@ -1081,7 +1093,7 @@ function Sidebar({ active, onChange }) {
       </div>
     </aside>
   );
-}
+});
 
 function App() {
   const [page, setPage] = useState('dashboard');
@@ -1095,13 +1107,7 @@ function App() {
     fetch(`${API}/api/summary`).then((r) => r.json()).then(setSummary).catch(() => {});
     fetch(`${API}/api/users`).then((r) => r.json()).then((d) => Array.isArray(d) && setUsers(d)).catch(() => {});
   }, []);
-  useEffect(() => {
-    if (page !== 'analytics') {
-      refreshAll();
-      const t = setInterval(refreshAll, 30000);
-      return () => clearInterval(t);
-    }
-  }, [refreshAll, page]);
+  usePolling(refreshAll, page === 'analytics' ? 0 : 30000);
 
   const openChat = (c) => {
     setChatLoading(true);

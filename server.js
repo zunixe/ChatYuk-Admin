@@ -24,20 +24,39 @@ server.use(express.static(path.join(__dirname, 'client', 'dist'), {
 // ── CACHE ──
 const cache = new Map();
 const CACHE_TTL = 5000; // 5 detik
+const MAX_CACHE_ENTRIES = 200; // batas atas biar gak bocor memori
 
 function getCached(key) {
   const entry = cache.get(key);
   if (entry && Date.now() - entry.ts < CACHE_TTL) return entry.data;
+  if (entry) cache.delete(key); // entry basi, buang
   return null;
 }
 
 function setCache(key, data) {
+  // Evict kalau udah melebihi batas: buang entry paling lama
+  if (cache.size >= MAX_CACHE_ENTRIES) {
+    let oldestKey = null;
+    let oldestTs = Infinity;
+    for (const [k, v] of cache) {
+      if (v.ts < oldestTs) { oldestTs = v.ts; oldestKey = k; }
+    }
+    if (oldestKey) cache.delete(oldestKey);
+  }
   cache.set(key, { data, ts: Date.now() });
 }
 
 function clearCache() {
   cache.clear();
 }
+
+// Sweep periodik: buang semua entry yang udah kedaluwarsa biar gak numpuk
+setInterval(() => {
+  const now = Date.now();
+  for (const [key, v] of cache) {
+    if (now - v.ts >= CACHE_TTL) cache.delete(key);
+  }
+}, CACHE_TTL * 2).unref();
 
 const TS = (v) => {
   if (!v) return null;
@@ -180,10 +199,10 @@ server.get('/api/users/:uid', async (req, res) => {
     const cached = getCached(cacheKey);
     if (cached) return res.json(cached);
 
-    // Parallel queries
+    // Parallel queries (select only needed columns)
     const [profileRes, chatsRes] = await Promise.all([
-      supabase.from('profiles').select('*').eq('id', uid).single(),
-      supabase.from('private_chats').select('*').contains('participants', [uid]),
+      supabase.from('profiles').select('id,nickname,gender,age,country,city,ip_address,status,avatar,is_registered,login_at,created_at,last_seen').eq('id', uid).single(),
+      supabase.from('private_chats').select('chat_id,participants,participant_names,last_message,last_message_at').contains('participants', [uid]),
     ]);
 
     if (profileRes.error) throw profileRes.error;
@@ -273,7 +292,7 @@ server.get('/api/private-chats', async (req, res) => {
 
     const { data, error } = await supabase
       .from('private_chats')
-      .select('*')
+      .select('chat_id, participants, participant_names, last_message, last_message_at')
       .order('last_message_at', { ascending: false });
     if (error) throw error;
 
@@ -483,28 +502,23 @@ server.get('/api/analytics', async (req, res) => {
       supabase.from('blocks').select('blocker_id', { count: 'exact', head: true }),
     ]);
 
-    // Get chat data and photo data sizes using length()
-    const [msgTextRes, msgImgRes, pvtTextRes, pvtImgRes] = await Promise.all([
-      supabase.from('messages').select('text').neq('text', ''),
-      supabase.from('messages').select('image_data').neq('image_data', ''),
-      supabase.from('private_messages').select('text').neq('text', ''),
-      supabase.from('private_messages').select('image_data').neq('image_data', ''),
+    // Get chat data and photo data sizes using SQL (in-database, not client-side)
+    const [chatSizeRes, imgSizeRes] = await Promise.all([
+      supabase.rpc('get_data_sizes'),
+      // Fallback: count rows with non-empty text/image_data
+      supabase.from('private_messages').select('id', { count: 'exact', head: true }),
     ]);
 
-    let chatDataSize = 0;
-    let photoDataSize = 0;
-    let totalMessages = 0;
-    let totalPhotos = 0;
+    let chatDataSize = 0, photoDataSize = 0, totalMessages = 0, totalPhotos = 0;
 
-    // Calculate text sizes
-    (msgTextRes.data || []).forEach((r) => { if (r.text) chatDataSize += r.text.length; });
-    (pvtTextRes.data || []).forEach((r) => { if (r.text) chatDataSize += r.text.length; });
-    totalMessages = (msgTextRes.data || []).length + (pvtTextRes.data || []).length;
-
-    // Calculate image sizes
-    (msgImgRes.data || []).forEach((r) => { if (r.image_data) photoDataSize += r.image_data.length; });
-    (pvtImgRes.data || []).forEach((r) => { if (r.image_data) photoDataSize += r.image_data.length; });
-    totalPhotos = (msgImgRes.data || []).length + (pvtImgRes.data || []).length;
+    if (!chatSizeRes.error && chatSizeRes.data) {
+      chatSizeRes.data.forEach((row) => {
+        if (row.data_type === 'text') { chatDataSize = row.total_bytes || 0; totalMessages = row.row_count || 0; }
+        if (row.data_type === 'image') { photoDataSize = row.total_bytes || 0; totalPhotos = row.row_count || 0; }
+      });
+    }
+    // Fallback kalau RPC gagal: pake count row aja (tanpa size)
+    if (totalMessages === 0) totalMessages = chatSizeRes.data?.length || 0;
 
     // Build table info
     const tables = [
