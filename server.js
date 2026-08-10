@@ -590,25 +590,34 @@ server.get('/api/analytics', async (req, res) => {
       return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
     };
 
-    // Free tier limits (Supabase)
+    // Compute actual DB usage from table sizes (from RPC), fallback ke estimate
+    let dbUsedBytes = 0;
+    if (!tableError && tableSizes) {
+      tableSizes.forEach((ts) => {
+        const bytes = parseInt(ts.total_size, 10);
+        if (!isNaN(bytes)) dbUsedBytes += bytes;
+      });
+    }
+    if (dbUsedBytes === 0) dbUsedBytes = 28 * 1024 * 1024; // fallback 28MB estimate
+
     const result = {
       database: {
-        used: '28 MB',
+        used: formatBytes(dbUsedBytes),
         limit: '500 MB',
-        usedPercent: 5.6,
+        usedPercent: parseFloat(((dbUsedBytes / (500 * 1024 * 1024)) * 100).toFixed(2)),
       },
       storage: {
-        used: '0 GB',
+        used: '-',
         limit: '1 GB',
         usedPercent: 0,
       },
       bandwidth: {
-        used: '8 MB',
+        used: '-',
         limit: '5 GB',
-        usedPercent: 0.16,
+        usedPercent: 0,
       },
       mau: {
-        current: 3,
+        current: '-',
         limit: '50,000',
       },
       chatData: {

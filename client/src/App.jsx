@@ -1,6 +1,29 @@
-import { useEffect, useState, useCallback, useMemo, useRef, memo } from 'react';
+import { useEffect, useState, useCallback, useMemo, useRef, memo, Component } from 'react';
 
 const API = '';
+
+// Error boundary: cegah seluruh dashboard crash jadi blank white screen
+class ErrorBoundary extends Component {
+  constructor(props) {
+    super(props);
+    this.state = { hasError: false };
+  }
+  static getDerivedStateFromError() { return { hasError: true }; }
+  render() {
+    if (this.state.hasError) {
+      return (
+        <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '100vh', background: 'var(--bg-screen)', color: 'var(--text-muted)', fontFamily: 'inherit' }}>
+          <div style={{ textAlign: 'center' }}>
+            <h2 style={{ color: 'var(--red)', marginBottom: 12 }}>Oops! Terjadi error</h2>
+            <p style={{ marginBottom: 16 }}>Coba refresh halaman</p>
+            <button className="btn" onClick={() => { this.setState({ hasError: false }); window.location.reload(); }}>Refresh</button>
+          </div>
+        </div>
+      );
+    }
+    return this.props.children;
+  }
+}
 
 // Polling yang sadar visibility: berhenti nge-fetch saat tab di-background.
 function usePolling(callback, interval) {
@@ -35,6 +58,7 @@ const timeAgo = (iso) => {
   if (isNaN(d)) return '-';
   const now = new Date();
   const diff = Math.floor((now - d) / 1000);
+  if (diff < 0) return 'Baru saja';
   if (diff < 60) return 'Baru saja';
   if (diff < 3600) return `${Math.floor(diff / 60)}m lalu`;
   if (diff < 86400) return `${Math.floor(diff / 3600)}j lalu`;
@@ -1254,3 +1278,4 @@ function App() {
 }
 
 export default App;
+export { ErrorBoundary };
