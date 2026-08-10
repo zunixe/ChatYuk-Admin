@@ -99,18 +99,22 @@ function MessagesModal({ title, messages, meId, names, onClose }) {
 
 function UserModal({ user, onClose, onOpenChat }) {
   const [detail, setDetail] = useState(null);
+  const [err, setErr] = useState(false);
   useEffect(() => {
-    fetch(`${API}/api/users/${user.uid}`)
+    const ctrl = new AbortController();
+    setErr(false);
+    fetch(`${API}/api/users/${user.uid}`, { signal: ctrl.signal })
       .then((r) => r.json())
       .then(setDetail)
-      .catch(() => {});
+      .catch((e) => { if (e.name !== 'AbortError') setErr(true); });
+    return () => ctrl.abort();
   }, [user.uid]);
 
   if (!detail) {
     return (
       <div className="modal-overlay" onClick={onClose}>
         <div className="modal" style={{ padding: 40, textAlign: 'center' }}>
-          <div style={{ color: 'var(--text-muted)' }}>Memuat...</div>
+          <div style={{ color: err ? 'var(--red)' : 'var(--text-muted)' }}>{err ? 'Gagal memuat data user' : 'Memuat...'}</div>
         </div>
       </div>
     );
@@ -496,14 +500,18 @@ const AnalyticsPage = memo(function AnalyticsPage() {
   const [stats, setStats] = useState(null);
   const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
-    setLoading(true);
+  const load = useCallback((showLoading) => {
+    if (showLoading) setLoading(true);
     fetch(`${API}/api/analytics`)
       .then((r) => r.json())
       .then(setStats)
       .catch(() => {})
       .finally(() => setLoading(false));
   }, []);
+
+  useEffect(() => { load(true); }, [load]);
+  // Auto-refresh setiap 60s (tanpa spinner, silent update)
+  usePolling(() => load(false), 60000);
 
   if (loading) {
     return (
@@ -673,7 +681,7 @@ const AnalyticsPage = memo(function AnalyticsPage() {
 });
 
 // ── SUPABASE SETTINGS PAGE ──
-function SupabaseSettingsPage() {
+const SupabaseSettingsPage = memo(function SupabaseSettingsPage() {
   const [config, setConfig] = useState(null);
   const [loading, setLoading] = useState(true);
 
@@ -780,10 +788,10 @@ function SupabaseSettingsPage() {
       </div>
     </div>
   );
-}
+});
 
 // ── XENDIT SETTINGS PAGE ──
-function XenditSettingsPage() {
+const XenditSettingsPage = memo(function XenditSettingsPage() {
   return (
     <div>
       {/* Connection Status */}
@@ -879,10 +887,10 @@ function XenditSettingsPage() {
       </div>
     </div>
   );
-}
+});
 
 // ── QRIS SETTINGS PAGE ──
-function QRISSettingsPage() {
+const QRISSettingsPage = memo(function QRISSettingsPage() {
   return (
     <div>
       {/* Connection Status */}
@@ -1010,7 +1018,7 @@ function QRISSettingsPage() {
       </div>
     </div>
   );
-}
+});
 
 // ── SIDEBAR ──
 const Sidebar = memo(function Sidebar({ active, onChange }) {
@@ -1107,9 +1115,10 @@ function App() {
     fetch(`${API}/api/summary`).then((r) => r.json()).then(setSummary).catch(() => {});
     fetch(`${API}/api/users`).then((r) => r.json()).then((d) => Array.isArray(d) && setUsers(d)).catch(() => {});
   }, []);
-  usePolling(refreshAll, page === 'analytics' ? 0 : 30000);
+  const isDataPage = page === 'dashboard' || page === 'users' || page === 'chats' || page === 'rooms';
+  usePolling(refreshAll, isDataPage ? 30000 : 0);
 
-  const openChat = (c) => {
+  const openChat = useCallback((c) => {
     setChatLoading(true);
     setChatModal({ ...c, messages: [] });
     fetch(`${API}/api/private-chats/${c.chatId}/messages?limit=200`)
@@ -1124,9 +1133,9 @@ function App() {
       })
       .catch(() => {})
       .finally(() => setChatLoading(false));
-  };
+  }, []);
 
-  const openRoomChat = (r) => {
+  const openRoomChat = useCallback((r) => {
     setChatLoading(true);
     setChatModal({ roomId: r.id, messages: [], isRoom: true });
     fetch(`${API}/api/rooms/${r.id}/messages?limit=200`)
@@ -1134,7 +1143,7 @@ function App() {
       .then((d) => setChatModal((prev) => ({ ...prev, messages: d.messages || [] })))
       .catch(() => {})
       .finally(() => setChatLoading(false));
-  };
+  }, []);
 
   const sc = summary?.statusCounts || {};
 

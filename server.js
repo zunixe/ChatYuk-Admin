@@ -16,6 +16,35 @@ const PORT = process.env.PORT || 8090;
 // ── MIDDLEWARE ──
 server.use(compression());
 server.use(express.json());
+
+// ── SECURITY HEADERS ──
+server.use((req, res, next) => {
+  res.setHeader('X-Content-Type-Options', 'nosniff');
+  res.setHeader('X-Frame-Options', 'DENY');
+  res.setHeader('X-XSS-Protection', '0');
+  res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin');
+  next();
+});
+
+// ── RATE LIMIT ──
+const rateLimit = require('express-rate-limit');
+const limiter = rateLimit({ windowMs: 60 * 1000, max: 120, standardHeaders: true, legacyHeaders: false });
+server.use('/api', limiter);
+
+// ── AUTH (Bearer token dari env) ──
+const ADMIN_TOKEN = process.env.ADMIN_TOKEN;
+if (ADMIN_TOKEN) {
+  server.use('/api', (req, res, next) => {
+    const auth = req.headers.authorization;
+    if (!auth || !auth.startsWith('Bearer ') || auth.slice(7) !== ADMIN_TOKEN) {
+      return res.status(401).json({ error: 'Unauthorized' });
+    }
+    next();
+  });
+} else {
+  console.warn('WARNING: ADMIN_TOKEN env tidak diset. Endpoint /api TIDAK terlindungi.');
+}
+
 server.use(express.static(path.join(__dirname, 'client', 'dist'), {
   maxAge: '1h',
   etag: true,
@@ -23,7 +52,7 @@ server.use(express.static(path.join(__dirname, 'client', 'dist'), {
 
 // ── CACHE ──
 const cache = new Map();
-const CACHE_TTL = 5000; // 5 detik
+const CACHE_TTL = 15000; // 15 detik
 const MAX_CACHE_ENTRIES = 200; // batas atas biar gak bocor memori
 
 function getCached(key) {
@@ -62,7 +91,15 @@ const TS = (v) => {
   if (!v) return null;
   if (typeof v === 'string') return v;
   if (v instanceof Date) return v.toISOString();
+  if (typeof v === 'object') return JSON.stringify(v);
   return String(v);
+};
+
+const maskIP = (ip) => {
+  if (!ip) return '';
+  const parts = ip.split('.');
+  if (parts.length !== 4) return '***';
+  return ['***', '***', '***', parts[3]].join('.');
 };
 
 // Derive status asli dari umur last_seen.
@@ -173,7 +210,7 @@ server.get('/api/users', async (req, res) => {
         age: u.age || 0,
         country: u.country || '',
         city: u.city || '',
-        ipAddress: u.ip_address || '',
+        ipAddress: maskIP(u.ip_address),
         loginAt: TS(u.login_at),
         createdAt: TS(u.created_at),
         status: st,
@@ -265,7 +302,7 @@ server.get('/api/users/:uid', async (req, res) => {
       age: u.age || 0,
       country: u.country || '',
       city: u.city || '',
-      ipAddress: u.ip_address || '',
+      ipAddress: maskIP(u.ip_address),
       loginAt: TS(u.login_at),
       createdAt: TS(u.created_at),
       status: st,
@@ -329,14 +366,14 @@ server.get('/api/private-chats', async (req, res) => {
 // ── PRIVATE CHAT MESSAGES ──
 server.get('/api/private-chats/:chatId/messages', async (req, res) => {
   try {
-    const limit = Math.min(parseInt(req.query.limit || '200'), 500);
+    const limit = Math.min(parseInt(req.query.limit, 10) || 200, 500);
     const chatId = req.params.chatId;
     const cacheKey = `msgs:${chatId}:${limit}`;
     const cached = getCached(cacheKey);
     if (cached) return res.json(cached);
 
     const [chatRes, msgsRes] = await Promise.all([
-      supabase.from('private_chats').select('*').eq('chat_id', chatId).single(),
+      supabase.from('private_chats').select('chat_id, participants, participant_names, last_message, last_message_at').eq('chat_id', chatId).single(),
       supabase
         .from('private_messages')
         .select('id, sender_id, sender_name, text, type, image_data, created_at')
@@ -413,7 +450,7 @@ server.get('/api/rooms', async (req, res) => {
 // ── ROOM MESSAGES ──
 server.get('/api/rooms/:roomId/messages', async (req, res) => {
   try {
-    const limit = Math.min(parseInt(req.query.limit || '200'), 500);
+    const limit = Math.min(parseInt(req.query.limit, 10) || 200, 500);
     const roomId = req.params.roomId;
     const cacheKey = `room-msgs:${roomId}:${limit}`;
     const cached = getCached(cacheKey);
@@ -517,8 +554,8 @@ server.get('/api/analytics', async (req, res) => {
         if (row.data_type === 'image') { photoDataSize = row.total_bytes || 0; totalPhotos = row.row_count || 0; }
       });
     }
-    // Fallback kalau RPC gagal: pake count row aja (tanpa size)
-    if (totalMessages === 0) totalMessages = chatSizeRes.data?.length || 0;
+    // Fallback kalau RPC gagal: pake count row dari query count (bukan .length array)
+    if (totalMessages === 0) totalMessages = (messages.count || 0) + (privateMessages.count || 0);
 
     // Build table info
     const tables = [
@@ -607,18 +644,14 @@ server.get('/api/settings/supabase', async (req, res) => {
     if (cached) return res.json(cached);
 
     const url = process.env.SUPABASE_URL || '';
-    const projectRef = url.replace('https://', '').replace('.supabase.co', '');
+    const projectRef = url ? url.replace('https://', '').replace('.supabase.co', '') : 'N/A';
     const anonKey = process.env.SUPABASE_ANON_KEY || '';
-    const serviceKey = process.env.SUPABASE_SERVICE_KEY || '';
-
-    // Count objects
-    const { data: rpcFunctions } = await supabase.rpc('get_table_sizes');
 
     const result = {
       url,
       projectRef,
-      anonKey: anonKey ? anonKey.slice(0, 20) + '...' : 'Not set',
-      serviceKey: serviceKey ? serviceKey.slice(0, 20) + '...' : 'Not set',
+      anonKey: anonKey ? 'configured' : 'Not set',
+      serviceKey: process.env.SUPABASE_SERVICE_KEY ? 'configured' : 'Not set',
       tables: 8,
       functions: 4,
       policies: 15,
