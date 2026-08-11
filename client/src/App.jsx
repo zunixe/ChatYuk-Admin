@@ -102,18 +102,27 @@ const Bubble = memo(function Bubble({ m, meId, names }) {
 });
 
 function MessagesModal({ title, messages, meId, names, onClose }) {
+  const [showAll, setShowAll] = useState(false);
+  const display = showAll ? messages : messages.slice(-200);
   return (
     <div className="modal-overlay" onClick={onClose}>
       <div className="modal" onClick={(e) => e.stopPropagation()}>
         <div className="modal-header">
-          <b>{title}</b>
+          <b>{title} ({(messages || []).length} pesan)</b>
           <button onClick={onClose} aria-label="Tutup">✕</button>
         </div>
         <div className="modal-body chat-body">
-          {messages.length === 0 ? (
+          {(messages || []).length === 0 ? (
             <div className="empty-state">Belum ada pesan</div>
           ) : (
-            messages.map((m) => <Bubble key={m.id} m={m} meId={meId} names={names} />)
+            <>
+              {display.map((m) => <Bubble key={m.id} m={m} meId={meId} names={names} />)}
+              {(messages || []).length > 200 && !showAll && (
+                <div style={{ textAlign: 'center', padding: 12 }}>
+                  <button className="btn" onClick={() => setShowAll(true)}>Tampilkan semua ({(messages || []).length} pesan)</button>
+                </div>
+              )}
+            </>
           )}
         </div>
       </div>
