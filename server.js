@@ -145,17 +145,21 @@ server.get('/api/summary', async (req, res) => {
     const cached = getCached('summary');
     if (cached) return res.json(cached);
 
+    // RPC `get_room_online_counts` — DB admin should create this SQL function:
+    //   CREATE OR REPLACE FUNCTION get_room_online_counts()
+    //   RETURNS TABLE(room_id text, cnt bigint) LANGUAGE sql STABLE AS $$
+    //     SELECT room_id, COUNT(*)::bigint FROM room_presence GROUP BY room_id;
+    //   $$;
     const [profilesRes, chatsRes, roomsRes, presenceRes] = await Promise.all([
       supabase.from('profiles').select('id, status, last_seen', { count: 'exact' }),
       supabase.from('private_chats').select('chat_id', { count: 'exact' }),
       supabase.from('rooms').select('id, name, icon, order').order('order'),
-      supabase.from('room_presence').select('room_id, user_id'),
+      supabase.rpc('get_room_online_counts'),
     ]);
 
     if (profilesRes.error) throw profilesRes.error;
     if (chatsRes.error) throw chatsRes.error;
     if (roomsRes.error) throw roomsRes.error;
-    if (presenceRes.error) throw presenceRes.error;
 
     const statusCounts = { online: 0, idle: 0, offline: 0 };
     (profilesRes.data || []).forEach((p) => {
@@ -164,9 +168,19 @@ server.get('/api/summary', async (req, res) => {
     });
 
     const roomOnlineMap = {};
-    (presenceRes.data || []).forEach((rp) => {
-      roomOnlineMap[rp.room_id] = (roomOnlineMap[rp.room_id] || 0) + 1;
-    });
+    if (presenceRes.error || !presenceRes.data) {
+      // fallback: client-side counting from room_presence table
+      const { data: fallbackData, error: fbErr } = await supabase.from('room_presence').select('room_id, user_id');
+      if (!fbErr) {
+        (fallbackData || []).forEach((rp) => {
+          roomOnlineMap[rp.room_id] = (roomOnlineMap[rp.room_id] || 0) + 1;
+        });
+      }
+    } else {
+      for (const r of presenceRes.data) {
+        roomOnlineMap[r.room_id] = r.cnt;
+      }
+    }
 
     const rooms = (roomsRes.data || []).map((r) => ({
       id: r.id,
@@ -189,19 +203,29 @@ server.get('/api/summary', async (req, res) => {
   }
 });
 
-// ── USERS (cached) ──
+// ── USERS (paginated) ──
 server.get('/api/users', async (req, res) => {
   try {
-    const cached = getCached('users');
+    const page = Math.max(parseInt(req.query.page, 10) || 1, 1);
+    const pageSize = Math.min(Math.max(parseInt(req.query.size, 10) || 50, 10), 200);
+    const start = (page - 1) * pageSize;
+    const end = start + pageSize - 1;
+    const cacheKey = `users:p${page}:s${pageSize}`;
+    const cached = getCached(cacheKey);
     if (cached) return res.json(cached);
 
-    const { data, error } = await supabase
-      .from('profiles')
-      .select('id, nickname, gender, age, country, city, ip_address, status, avatar, login_at, created_at, last_seen, is_registered')
-      .order('created_at', { ascending: false });
-    if (error) throw error;
+    const [dataRes, countRes] = await Promise.all([
+      supabase
+        .from('profiles')
+        .select('id, nickname, gender, age, country, city, ip_address, status, avatar, login_at, created_at, last_seen, is_registered')
+        .order('created_at', { ascending: false })
+        .range(start, end),
+      supabase.from('profiles').select('id', { count: 'exact', head: true }),
+    ]);
+    if (dataRes.error) throw dataRes.error;
+    if (countRes.error) throw countRes.error;
 
-    const users = (data || []).map((u) => {
+    const users = (dataRes.data || []).map((u) => {
       const st = deriveStatus(u.status, u.last_seen);
       return {
         uid: u.id,
@@ -221,8 +245,9 @@ server.get('/api/users', async (req, res) => {
       };
     });
 
-    setCache('users', users);
-    res.json(users);
+    const result = { users, total: countRes.count || 0, page, pageSize };
+    setCache(cacheKey, result);
+    res.json(result);
   } catch (e) {
     res.status(500).json({ error: e.message });
   }

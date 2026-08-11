@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback, useMemo, useRef, memo, Component } from 'react';
+import { useEffect, useState, useCallback, useMemo, useRef, memo, Component, Suspense, lazy } from 'react';
 
 const API = '';
 
@@ -107,7 +107,7 @@ function MessagesModal({ title, messages, meId, names, onClose }) {
       <div className="modal" onClick={(e) => e.stopPropagation()}>
         <div className="modal-header">
           <b>{title}</b>
-          <button onClick={onClose}>✕</button>
+          <button onClick={onClose} aria-label="Tutup">✕</button>
         </div>
         <div className="modal-body chat-body">
           {messages.length === 0 ? (
@@ -149,7 +149,7 @@ function UserModal({ user, onClose, onOpenChat }) {
       <div className="modal" onClick={(e) => e.stopPropagation()}>
         <div className="modal-header">
           <b>User: {detail.nickname}</b>
-          <button onClick={onClose}>✕</button>
+          <button onClick={onClose} aria-label="Tutup">✕</button>
         </div>
         <div className="modal-body">
           <div style={{ display: 'flex', gap: 20, marginBottom: 24, alignItems: 'center' }}>
@@ -233,30 +233,33 @@ function UserModal({ user, onClose, onOpenChat }) {
   );
 }
 
-const UsersTab = memo(function UsersTab({ users, onOpenUser }) {
+const UsersTab = memo(function UsersTab({ users, onOpenUser, total, page, pageSize, onPageChange }) {
   const [q, setQ] = useState('');
   const [filter, setFilter] = useState('all');
   const [typeFilter, setTypeFilter] = useState('all');
 
-  const registered = useMemo(() => users.filter((u) => u.isRegistered), [users]);
-  const guests = useMemo(() => users.filter((u) => !u.isRegistered), [users]);
-
-  const filtered = useMemo(() => {
+  const { registered, guests, filtered, typeButtons } = useMemo(() => {
+    const reg = users.filter((u) => u.isRegistered);
+    const gst = users.filter((u) => !u.isRegistered);
     const ql = q.toLowerCase();
-    return users.filter((u) => {
+    const flt = users.filter((u) => {
       if (typeFilter === 'registered' && !u.isRegistered) return false;
       if (typeFilter === 'guest' && u.isRegistered) return false;
       if (filter !== 'all' && u.status !== filter) return false;
       const s = `${u.nickname} ${u.country} ${u.city} ${u.ipAddress} ${u.uid}`.toLowerCase();
       return s.includes(ql);
     });
+    return {
+      registered: reg,
+      guests: gst,
+      filtered: flt,
+      typeButtons: [
+        { id: 'all', label: `Semua (${users.length})` },
+        { id: 'registered', label: `✓ Terdaftar (${reg.length})` },
+        { id: 'guest', label: `○ Guest (${gst.length})` },
+      ],
+    };
   }, [users, q, filter, typeFilter]);
-
-  const typeButtons = [
-    { id: 'all', label: `Semua (${users.length})` },
-    { id: 'registered', label: `✓ Terdaftar (${registered.length})` },
-    { id: 'guest', label: `○ Guest (${guests.length})` },
-  ];
 
   return (
     <div>
@@ -357,6 +360,13 @@ const UsersTab = memo(function UsersTab({ users, onOpenUser }) {
           )}
         </tbody>
       </table>
+      {total > 0 && (
+        <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', gap: 12, marginTop: 16 }}>
+          <button className="btn" disabled={page <= 1} onClick={() => onPageChange(page - 1)}>‹ Prev</button>
+          <span style={{ fontSize: 13, color: 'var(--text-muted)' }}>Hal {page} ({users.length} user, total {total})</span>
+          <button className="btn" disabled={page * pageSize >= total} onClick={() => onPageChange(page + 1)}>Next ›</button>
+        </div>
+      )}
     </div>
   );
 });
@@ -1131,14 +1141,27 @@ function App() {
   const [page, setPage] = useState('dashboard');
   const [summary, setSummary] = useState(null);
   const [users, setUsers] = useState([]);
+  const [userTotal, setUserTotal] = useState(0);
+  const [userPage, setUserPage] = useState(1);
+  const [userPageSize] = useState(50);
   const [userModal, setUserModal] = useState(null);
   const [chatModal, setChatModal] = useState(null);
   const [chatLoading, setChatLoading] = useState(false);
 
+  const loadUsers = useCallback((p) => {
+    fetch(`${API}/api/users?page=${p}&size=${userPageSize}`)
+      .then((r) => r.json())
+      .then((d) => {
+        if (d.users) { setUsers(d.users); setUserTotal(d.total || 0); setUserPage(d.page || 1); }
+        else if (Array.isArray(d)) { setUsers(d); setUserTotal(d.length); } // fallback legacy
+      })
+      .catch(() => {});
+  }, [userPageSize]);
+
   const refreshAll = useCallback(() => {
     fetch(`${API}/api/summary`).then((r) => r.json()).then(setSummary).catch(() => {});
-    fetch(`${API}/api/users`).then((r) => r.json()).then((d) => Array.isArray(d) && setUsers(d)).catch(() => {});
-  }, []);
+    loadUsers(userPage);
+  }, [loadUsers, userPage]);
   const isDataPage = page === 'dashboard' || page === 'users' || page === 'chats' || page === 'rooms';
   usePolling(refreshAll, isDataPage ? 30000 : 0);
 
@@ -1190,7 +1213,7 @@ function App() {
       case 'settings-supabase': return 'Konfigurasi koneksi Supabase';
       case 'settings-xendit': return 'Konfigurasi payment gateway Xendit';
       case 'settings-qris': return 'Konfigurasi pembayaran QR Code QRIS';
-      default: return `Total: ${users.length} user terdaftar`;
+      default: return `Total: ${userTotal || users.length} user terdaftar`;
     }
   };
 
@@ -1204,60 +1227,62 @@ function App() {
           <div style={{ fontSize: 13, color: 'var(--text-dim)' }}>{getPageSubtitle()}</div>
         </header>
 
-        {page === 'analytics' ? (
-          <AnalyticsPage />
-        ) : page === 'settings-supabase' ? (
-          <SupabaseSettingsPage />
-        ) : page === 'settings-xendit' ? (
-          <XenditSettingsPage />
-        ) : page === 'settings-qris' ? (
-          <QRISSettingsPage />
-        ) : (
-          <>
-            {page === 'dashboard' && (
-              <div className="cards">
-                <div className="card">
-                  <div className="num">{summary?.users ?? '-'}</div>
-                  <div className="lbl">Total User</div>
+        <Suspense fallback={<div style={{textAlign:'center',padding:60}}><div style={{color:'var(--text-muted)'}}>Memuat...</div></div>}>
+          {page === 'analytics' ? (
+            <AnalyticsPage />
+          ) : page === 'settings-supabase' ? (
+            <SupabaseSettingsPage />
+          ) : page === 'settings-xendit' ? (
+            <XenditSettingsPage />
+          ) : page === 'settings-qris' ? (
+            <QRISSettingsPage />
+          ) : (
+            <>
+              {page === 'dashboard' && (
+                <div className="cards">
+                  <div className="card">
+                    <div className="num">{summary?.users ?? '-'}</div>
+                    <div className="lbl">Total User</div>
+                  </div>
+                  <div className="card" style={{ borderTop: '3px solid var(--green)' }}>
+                    <div className="num" style={{ color: 'var(--green)' }}>{sc.online ?? 0}</div>
+                    <div className="lbl">Online</div>
+                  </div>
+                  <div className="card" style={{ borderTop: '3px solid var(--yellow)' }}>
+                    <div className="num" style={{ color: 'var(--yellow)' }}>{sc.idle ?? 0}</div>
+                    <div className="lbl">Idle</div>
+                  </div>
+                  <div className="card" style={{ borderTop: '3px solid var(--text-dim)' }}>
+                    <div className="num" style={{ color: 'var(--text-dim)' }}>{sc.offline ?? 0}</div>
+                    <div className="lbl">Offline</div>
+                  </div>
+                  <div className="card" style={{ borderTop: '3px solid var(--accent)' }}>
+                    <div className="num">{summary?.privateChats ?? '-'}</div>
+                    <div className="lbl">Private Chat</div>
+                  </div>
+                  <div className="card" style={{ borderTop: '3px solid var(--purple)' }}>
+                    <div className="num">{summary?.rooms?.length ?? '-'}</div>
+                    <div className="lbl">Room</div>
+                  </div>
+                  <div className="card wide" style={{ borderTop: '3px solid var(--cyan)' }}>
+                    <div className="lbl" style={{ marginBottom: 16 }}>Room Online</div>
+                    {(summary?.rooms || []).map((r) => (
+                      <div key={r.id} className="room-item">
+                        <span>{r.name}</span>
+                        <b>{r.online}</b>
+                      </div>
+                    ))}
+                    {(summary?.rooms || []).length === 0 && <div className="empty-state">Belum ada room</div>}
+                  </div>
                 </div>
-                <div className="card" style={{ borderTop: '3px solid var(--green)' }}>
-                  <div className="num" style={{ color: 'var(--green)' }}>{sc.online ?? 0}</div>
-                  <div className="lbl">Online</div>
-                </div>
-                <div className="card" style={{ borderTop: '3px solid var(--yellow)' }}>
-                  <div className="num" style={{ color: 'var(--yellow)' }}>{sc.idle ?? 0}</div>
-                  <div className="lbl">Idle</div>
-                </div>
-                <div className="card" style={{ borderTop: '3px solid var(--text-dim)' }}>
-                  <div className="num" style={{ color: 'var(--text-dim)' }}>{sc.offline ?? 0}</div>
-                  <div className="lbl">Offline</div>
-                </div>
-                <div className="card" style={{ borderTop: '3px solid var(--accent)' }}>
-                  <div className="num">{summary?.privateChats ?? '-'}</div>
-                  <div className="lbl">Private Chat</div>
-                </div>
-                <div className="card" style={{ borderTop: '3px solid var(--purple)' }}>
-                  <div className="num">{summary?.rooms?.length ?? '-'}</div>
-                  <div className="lbl">Room</div>
-                </div>
-                <div className="card wide" style={{ borderTop: '3px solid var(--cyan)' }}>
-                  <div className="lbl" style={{ marginBottom: 16 }}>Room Online</div>
-                  {(summary?.rooms || []).map((r) => (
-                    <div key={r.id} className="room-item">
-                      <span>{r.name}</span>
-                      <b>{r.online}</b>
-                    </div>
-                  ))}
-                  {(summary?.rooms || []).length === 0 && <div className="empty-state">Belum ada room</div>}
-                </div>
-              </div>
-            )}
+              )}
 
-            {page === 'users' && <UsersTab users={users} onOpenUser={setUserModal} />}
-            {page === 'chats' && <PrivateChatsTab onOpenChat={openChat} />}
-            {page === 'rooms' && <RoomsTab onOpenRoom={openRoomChat} />}
-          </>
-        )}
+              {page === 'users' && <UsersTab users={users} onOpenUser={setUserModal} total={userTotal} page={userPage} pageSize={userPageSize} onPageChange={(p) => loadUsers(p)} />}
+              {page === 'chats' && <PrivateChatsTab onOpenChat={openChat} />}
+              {page === 'rooms' && <RoomsTab onOpenRoom={openRoomChat} />}
+            </>
+          )}
+        </Suspense>
       </main>
 
       {userModal && (
